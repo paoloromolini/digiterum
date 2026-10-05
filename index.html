@@ -104,7 +104,7 @@
   <div id="drill" role="dialog" aria-modal="true" aria-label="Esercizio di concentrazione">
     <div class="inner">
       <h2>Fermati e concentrati</h2>
-      <div style="color:var(--muted)">Hai sbagliato questa parola 4 volte. Scrivila senza errori <b id="drillTarget">4</b> volte, guardando dove vanno le dita.</div>
+      <div style="color:var(--muted)">Hai sbagliato questa parola 4 volte. Scrivila senza errori <b id="drillTarget">4</b> volte di fila, guardando dove vanno le dita.</div>
       <div class="dots" id="drillDots"></div>
       <div id="drillWord"></div>
       <div id="drillInfo"></div>
@@ -291,9 +291,9 @@ function drillKey(e) {
       if (d.done >= DRILL_REPS) return endDrill();
     }
   } else {
-    d.buf = '';
+    d.buf = ''; d.done = 0;
     info.classList.add('bad');
-    info.textContent = `Errore: ripartiamo dall'inizio (questa ripetizione non conta).`;
+    info.textContent = `Errore: si riparte da zero. Servono ${DRILL_REPS} ripetizioni di fila.`;
     const w = $('drillWord'); w.classList.remove('shake'); void w.offsetWidth; w.classList.add('shake');
     setTimeout(() => { if (g.drill) { info.classList.remove('bad'); drillRender(); } }, 1200);
   }

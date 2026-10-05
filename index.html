@@ -272,6 +272,9 @@ document.querySelectorAll('[data-lang]').forEach(b => b.onclick = () => {
 $('restart').onclick = e => { e.target.blur(); newGame(); };
 $('finish').onclick = e => { e.target.blur(); if (g.started) endGame(); };
 
+// chiede al browser di non eliminare automaticamente i dati salvati
+try { navigator.storage?.persist?.(); } catch {}
+
 newGame();
 </script>
 </body>

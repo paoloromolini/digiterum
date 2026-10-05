@@ -66,6 +66,14 @@
   .kbd .space { width: 280px; margin: 0 auto; }
   .kbd .space.key { width: 280px; }
   .kbd .spacerow { justify-content: center; }
+  .rpRow { font: 40px/1.4 ui-monospace, Menlo, monospace; min-height: 56px; letter-spacing: 4px; }
+  #rpWord { color: var(--muted); margin-top: 12px; }
+  #rpTyped span { padding: 0 3px; border-radius: 6px; }
+  #rpInfo { min-height: 56px; font-size: 20px; margin: 8px 0; }
+  #rpSummary { text-align: left; max-width: 520px; margin: 0 auto 12px; min-height: 24px; padding-left: 20px; }
+  .rpBtns { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-bottom: 8px; }
+  .kbd .key.hit-ok { background: color-mix(in srgb, var(--ok) 55%, transparent) !important; }
+  .kbd .key.hit-bad { background: color-mix(in srgb, var(--bad) 65%, transparent) !important; }
   .kbd.compact .key { width: 38px; height: 38px; font-size: 15px; }
   .kbd.compact .space.key { width: 220px; font-size: 13px; }
   .kbd.compact .row { gap: 5px; margin-bottom: 5px; }
@@ -120,10 +128,24 @@
   <div id="drill" role="dialog" aria-modal="true" aria-label="Esercizio di concentrazione">
     <div class="inner">
       <h2>Fermati e concentrati</h2>
-      <div style="color:var(--muted)">Hai sbagliato questa parola 4 volte. Scrivila senza errori <b id="drillTarget">4</b> volte di fila, guardando dove vanno le dita.</div>
-      <div class="dots" id="drillDots"></div>
-      <div id="drillWord"></div>
-      <div id="drillInfo"></div>
+      <div id="replayBox">
+        <div style="color:var(--muted)">Hai sbagliato questa parola 4 volte. Guarda al rallentatore cosa è successo<span id="rpCount"></span>.</div>
+        <div id="rpWord" class="rpRow"></div>
+        <div id="rpTyped" class="rpRow"></div>
+        <div id="rpInfo"></div>
+        <ul id="rpSummary"></ul>
+        <div class="rpBtns">
+          <button id="rpAgain">Rivedi (R)</button>
+          <button id="rpOther">Altro tentativo</button>
+          <button id="rpGo" class="active">Vai agli esercizi (Invio)</button>
+        </div>
+      </div>
+      <div id="repsBox">
+        <div style="color:var(--muted)">Scrivi la parola senza errori <b id="drillTarget">4</b> volte di fila, guardando dove vanno le dita.</div>
+        <div class="dots" id="drillDots"></div>
+        <div id="drillWord"></div>
+        <div id="drillInfo"></div>
+      </div>
       <div id="kb" class="kbd"></div>
     </div>
   </div>
@@ -159,7 +181,8 @@ function newGame() {
     pool, queue: [], idx: 0, buf: '', wordBad: false,
     started: false, ended: false, t0: 0, timer: null,
     keys: 0, keysOk: 0, correctChars: 0, wordsOk: 0,
-    retry: new Set(), missCount: {}
+    retry: new Set(), missCount: {},
+    rec: [], recT0: 0, attempts: {}   // registrazione tasti del tentativo corrente / tentativi sbagliati per parola
   };
   while (g.queue.length < 40) g.queue.push(rand());
   $('sTime').textContent = state.mode || '∞';
@@ -234,12 +257,13 @@ function submitWord() {
     weak[word] = Math.min(6, (weak[word] || 0) + 2); save(weakKey(), weak);
     g.retry.add(word);
     g.missCount[word] = (g.missCount[word] || 0) + 1;
+    (g.attempts[word] ||= []).push({ typed: g.buf, keys: g.rec });
     // la parola torna fra 2-4 posizioni
     const at = Math.min(g.queue.length, g.idx + 1 + 2 + Math.floor(Math.random() * 3));
     g.queue.splice(at, 0, word);
     setHint(`Errore su "${word}": tornerà fra poco.`, true);
   }
-  g.idx++; g.buf = ''; g.wordBad = false;
+  g.idx++; g.buf = ''; g.wordBad = false; g.rec = [];
   while (g.queue.length < g.idx + 40) g.queue.push(rand());
   render();
   if (!ok && g.missCount[word] % DRILL_EVERY === 0) startDrill(word);
@@ -273,11 +297,95 @@ function buildKeyboard(kb) {
 }
 
 function startDrill(word) {
-  g.drill = { word, done: 0, buf: '', since: Date.now() };
+  const attempts = (g.attempts[word] || []).slice(-DRILL_EVERY);
+  g.drill = { word, done: 0, buf: '', since: Date.now(), attempts, ai: attempts.length - 1,
+              phase: attempts.length ? 'replay' : 'reps' };
   $('drillTarget').textContent = DRILL_REPS;
   buildKeyboard($('kb'));
   $('drill').style.display = 'block';
+  if (g.drill.phase === 'replay') playReplay(); else showReps();
+}
+function showReps() {
+  clearTimeout(rpTimer);
+  g.drill.phase = 'reps';
+  $('replayBox').style.display = 'none'; $('repsBox').style.display = '';
+  clearHits();
   drillRender();
+}
+
+// --- replay al rallentatore degli errori ---
+let rpTimer = null;
+const esc = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const KB_POS = {};
+KB_ROWS.forEach((r, ri) => [...r.keys].forEach((k, i) => KB_POS[k] = { x: i + r.pad / 54, y: ri }));
+const isNear = (a, b) => KB_POS[a] && KB_POS[b] &&
+  Math.hypot(KB_POS[a].x - KB_POS[b].x, KB_POS[a].y - KB_POS[b].y) <= 1.45;
+const fingerName = ch => fingerOf[ch] !== undefined ? FINGERS[fingerOf[ch]] : ch === ' ' ? 'pollici' : 'altro tasto';
+function clearHits() { document.querySelectorAll('#kb .key').forEach(k => k.classList.remove('hit-ok', 'hit-bad', 'next')); }
+
+// spiega che tipo di errore è stato: tasto vicino, lettere invertite, saltata, in più...
+function classify(w, t) {
+  if (t === w) return [];
+  if (t.length === w.length) {
+    const diff = [...w].map((_, i) => i).filter(i => w[i] !== t[i]);
+    const [a, b] = diff;
+    if (diff.length === 2 && b === a + 1 && w[a] === t[b] && w[b] === t[a])
+      return [`Lettere invertite: <b>${esc(w[a] + w[b])}</b> → <b>${esc(t[a] + t[b])}</b>. Rallenta su questa coppia.`];
+    return diff.map(i => {
+      const why = (isNear(w[i], t[i]) ? 'tasto vicino' : 'tasto lontano') +
+        (fingerOf[w[i]] !== undefined && fingerOf[w[i]] === fingerOf[t[i]] ? ', stesso dito' : '');
+      return `Posizione ${i + 1}: <b>${esc(t[i])}</b> invece di <b>${esc(w[i])}</b> (${why})`;
+    });
+  }
+  if (w.startsWith(t)) return [`Parola troppo corta: ti sei fermato dopo "<b>${esc(t)}</b>", mancava "<b>${esc(w.slice(t.length))}</b>".`];
+  if (t.length === w.length - 1) {
+    const j = [...w].findIndex((_, i) => w.slice(0, i) + w.slice(i + 1) === t);
+    if (j >= 0) return [`Lettera saltata: manca <b>${esc(w[j])}</b> (posizione ${j + 1}).`];
+  }
+  if (t.length === w.length + 1) {
+    const j = [...t].findIndex((_, i) => t.slice(0, i) + t.slice(i + 1) === w);
+    if (j >= 0) return [`Lettera in più: <b>${esc(t[j])}</b> (posizione ${j + 1}).`];
+  }
+  return [`Hai scritto "<b>${esc(t)}</b>" invece di "<b>${esc(w)}</b>".`];
+}
+
+function playReplay() {
+  clearTimeout(rpTimer);
+  const d = g.drill, w = d.word, a = d.attempts[d.ai];
+  d.phase = 'replay';
+  $('replayBox').style.display = ''; $('repsBox').style.display = 'none';
+  $('rpCount').textContent = d.attempts.length > 1 ? ` (tentativo ${d.ai + 1} di ${d.attempts.length})` : '';
+  $('rpOther').style.display = d.attempts.length > 1 ? '' : 'none';
+  $('rpWord').textContent = w; $('rpTyped').innerHTML = '';
+  $('rpInfo').innerHTML = ''; $('rpSummary').innerHTML = '';
+  clearHits();
+  let i = 0;
+  const step = () => {
+    if (i >= a.keys.length) return finish();
+    const { k } = a.keys[i], exp = w[i], ok = k === exp;
+    const gap = i ? a.keys[i].t - a.keys[i - 1].t : 0;
+    clearHits();
+    const key = [...document.querySelectorAll('#kb .key')].find(x => x.dataset.k === k);
+    if (key) key.classList.add(ok ? 'hit-ok' : 'hit-bad');
+    if (!ok && exp) markNext($('kb'), exp);
+    const span = document.createElement('span');
+    span.className = ok ? 'c-ok' : 'c-bad'; span.textContent = k; $('rpTyped').appendChild(span);
+    const pause = gap >= 500 ? ` <span style="color:var(--muted)">(esitazione di ${(gap / 1000).toFixed(1)}s prima)</span>` : '';
+    $('rpInfo').innerHTML = ok
+      ? `<b class="c-ok">${esc(k)}</b> ✓ ${esc(fingerName(k))}${pause}`
+      : exp
+        ? `Hai premuto <b class="c-extra">${esc(k)}</b> (${esc(fingerName(k))}) · dovevi premere <b>${esc(exp)}</b> (${esc(fingerName(exp))})${pause}`
+        : `Lettera in più: <b class="c-extra">${esc(k)}</b>${pause}`;
+    i++;
+    const next = a.keys[i];
+    rpTimer = setTimeout(step, next ? Math.min(2000, Math.max(700, (next.t - a.keys[i - 1].t) * 5)) : 900);
+  };
+  const finish = () => {
+    clearHits();
+    if (a.typed.length < w.length) $('rpInfo').innerHTML = `Spazio premuto dopo ${a.typed.length} lettere: la parola era incompleta.`;
+    $('rpSummary').innerHTML = classify(w, a.typed).map(s => `<li>${s}</li>`).join('');
+  };
+  rpTimer = setTimeout(step, 500);
 }
 function drillRender() {
   const d = g.drill, w = d.word;
@@ -320,6 +428,11 @@ function baseHelp() {
 function drillKey(e) {
   e.preventDefault();
   const d = g.drill;
+  if (d.phase === 'replay') {
+    if (e.key === 'Enter' || e.key === ' ') showReps();
+    else if (e.key.toLowerCase() === 'r') playReplay();
+    return;
+  }
   if (e.key.length !== 1 || e.ctrlKey || e.metaKey || e.altKey) return;
   const info = $('drillInfo');
   if (e.key === d.word[d.buf.length]) {
@@ -338,7 +451,12 @@ function drillKey(e) {
   }
   drillRender();
 }
+$('rpAgain').onclick = () => playReplay();
+$('rpOther').onclick = () => { const d = g.drill; d.ai = (d.ai - 1 + d.attempts.length) % d.attempts.length; playReplay(); };
+$('rpGo').onclick = () => showReps();
+
 function endDrill() {
+  clearTimeout(rpTimer);
   // il tempo passato nell'esercizio non conta per il timer
   g.t0 += Date.now() - g.drill.since;
   const w = g.drill.word;
@@ -410,7 +528,12 @@ document.addEventListener('keydown', e => {
   const k = g.buf.length;
   g.keys++;
   if (k < word.length && e.key === word[k]) g.keysOk++; else g.wordBad = true;
-  if (g.buf.length < word.length + 5) g.buf += e.key;
+  if (g.buf.length < word.length + 5) {
+    const now = performance.now();
+    if (!g.rec.length) g.recT0 = now;
+    g.rec.push({ k: e.key, t: now - g.recT0 });
+    g.buf += e.key;
+  }
   render();
 });
 

@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Digiterum</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #fff; --text: #1d2330; --muted: #8a93a6;
+    --ok: #1a9d5b; --bad: #d93a3a; --accent: #3b5bdb; --line: #e3e6ec;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #14171d; --card: #1d222b; --text: #e8ebf2; --muted: #7d869a;
+            --ok: #3ecf8e; --bad: #ff6b6b; --accent: #7c93ff; --line: #2b313d; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 16px/1.5 system-ui, sans-serif; min-height: 100vh;
+         display: flex; justify-content: center; padding: 24px 16px; }
+  main { width: 100%; max-width: 760px; }
+  h1 { font-size: 20px; margin: 0 0 16px; }
+  .bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 16px; }
+  .bar .spacer { flex: 1; }
+  button { font: inherit; border: 1px solid var(--line); background: var(--card); color: var(--text);
+           padding: 6px 12px; border-radius: 8px; cursor: pointer; }
+  button.active { border-color: var(--accent); color: var(--accent); }
+  button:hover { border-color: var(--accent); }
+  .stats { display: flex; gap: 24px; margin-bottom: 12px; color: var(--muted); }
+  .stats b { color: var(--text); font-size: 22px; font-variant-numeric: tabular-nums; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 28px 24px; }
+  #queue { font: 24px/1.8 ui-monospace, Menlo, monospace; word-spacing: 4px; min-height: 130px; overflow: hidden; }
+  #queue span.w { padding: 2px 4px; border-radius: 4px; }
+  #queue span.cur { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+  #queue span.retry { text-decoration: underline wavy var(--bad); text-underline-offset: 6px; }
+  .c-ok { color: var(--ok); } .c-bad { color: var(--bad); background: color-mix(in srgb, var(--bad) 18%, transparent); }
+  .c-extra { color: var(--bad); }
+  #hint { margin-top: 12px; color: var(--muted); font-size: 14px; min-height: 22px; }
+  #hint.bad { color: var(--bad); }
+  #result { display: none; }
+  #result h2 { margin-top: 0; }
+  .big { font-size: 48px; font-weight: 700; color: var(--accent); }
+  .missed span { display: inline-block; margin: 2px 4px 2px 0; padding: 2px 8px; border-radius: 6px;
+                 background: color-mix(in srgb, var(--bad) 14%, transparent); font-family: ui-monospace, Menlo, monospace; }
+</style>
+</head>
+<body>
+<main>
+  <h1 style="margin-bottom:0">Digiterum</h1>
+  <p style="margin:0 0 16px;color:var(--muted)">sbagliando si impara</p>
+
+  <div class="bar">
+    <span style="color:var(--muted)">Modalità</span>
+    <button data-mode="60" class="active">60s</button>
+    <button data-mode="30">30s</button>
+    <button data-mode="0">Libera</button>
+    <button id="weakBtn" title="Usa solo le parole su cui sbagli di più (servono almeno 3)">Solo punti deboli (<span id="weakN">0</span>)</button>
+    <span class="spacer"></span>
+    <span style="color:var(--muted)">Lingua</span>
+    <button data-lang="en" class="active">EN</button>
+    <button data-lang="it">IT</button>
+  </div>
+
+  <div class="stats">
+    <div>Tempo<br><b id="sTime">60</b></div>
+    <div>WPM<br><b id="sWpm">0</b></div>
+    <div>Accuratezza<br><b id="sAcc">100%</b></div>
+    <div>Da ripetere<br><b id="sPending">0</b></div>
+  </div>
+
+  <div class="card" id="game">
+    <div id="queue"></div>
+    <div id="hint">Inizia a scrivere: il timer parte al primo tasto. Backspace disabilitato.</div>
+  </div>
+
+  <div class="card" id="result"></div>
+
+  <div class="bar" style="margin-top:16px">
+    <button id="restart">Ricomincia (Tab)</button>
+    <button id="finish">Termina (Esc)</button>
+  </div>
+</main>
+
+<script>
+const WORDS = {
+  en: `the be to of and a in that have it for not on with he as you do at this but his by from they we say her she or an will my one all would there their what so up out if about who get which go me when make can like time no just him know take people into year your good some could them see other than then now look only come its over think also back after use two how our work first well way even new want because any these give day most us is are was were been has had said each tell does set three need follow land change large small own off point house picture try again animal mother world near build self earth father head stand page country found answer school grow study still learn plant cover food sun four between state keep eye never last let thought city tree cross farm hard start might story saw far sea draw left late run while press close night real life few north open seem together next white children begin got walk example ease paper group always music those both mark often letter until mile river car feet care second book carry took science eat room friend began idea fish mountain stop once base hear horse cut sure watch color face wood main enough plain girl usual young ready above ever red list though feel talk bird soon body dog family direct pose leave song measure door product black short numeral class wind question happen complete ship area half rock order fire south problem piece told knew pass since top whole king space heard best hour better true during hundred five remember step early hold west ground interest reach fast verb sing listen six table travel less morning ten simple several vowel toward war lay against pattern slow center love person money serve appear road map rain rule govern pull cold notice voice unit power town fine certain fly fall lead cry dark machine note wait plan figure star box noun field rest correct able pound done beauty drive stood contain front teach week final gave green oh quick develop ocean warm free minute strong special mind behind clear tail produce fact street inch multiply nothing course stay wheel full force blue object decide surface deep moon island foot system busy test record boat common gold possible plane stead dry wonder laugh thousand ago ran check game shape equate hot miss brought heat snow tire bring yes distant fill east paint language among`.split(/\s+/),
+  it: `il di che e la a per un in con non una su le si da come ma più anche io tu lui lei noi voi loro mio tuo suo nostro vostro questo quello essere avere fare dire andare vedere sapere volere potere dovere venire stare dare parlare trovare sentire lasciare prendere guardare mettere pensare passare credere portare tornare tenere chiedere vivere scrivere leggere correre mangiare bere dormire giocare lavorare studiare aprire chiudere casa tempo anno giorno uomo donna vita mondo mano occhio parte cosa modo volta paese città strada acqua fuoco terra cielo mare sole luna stella notte mattina sera amico famiglia madre padre figlio fratello sorella bambino ragazzo libro storia parola nome numero lavoro scuola stanza porta finestra tavolo sedia macchina treno aereo viaggio musica canzone film colore bianco nero rosso verde giallo azzurro grande piccolo nuovo vecchio bello brutto buono cattivo alto basso lungo corto giovane facile difficile veloce lento caldo freddo felice triste sempre mai ancora già ora poi prima dopo subito spesso qualche molto poco tutto niente ogni altro stesso primo ultimo ieri oggi domani fuori dentro sopra sotto davanti dietro vicino lontano insieme senza contro verso durante mentre perché quando dove quanto quale chi cosa però quindi allora anzi infatti dunque eppure sebbene nonostante soltanto pomeriggio settimana mese stagione inverno primavera estate autunno montagna fiume lago bosco giardino fiore albero animale cane gatto cavallo uccello pesce pane pasta pizza formaggio frutta verdura carne vino caffè latte zucchero sale`.split(/\s+/)
+};
+
+const $ = id => document.getElementById(id);
+const state = { mode: 60, lang: 'en', weakOnly: false };
+let g;
+
+// --- persistenza (localStorage, tollerante agli errori) ---
+function load(key, def) { try { return JSON.parse(localStorage.getItem(key)) ?? def; } catch { return def; } }
+function save(key, v) { try { localStorage.setItem(key, JSON.stringify(v)); } catch {} }
+const weakKey = () => 'tp.weak.' + state.lang;
+let weak = load(weakKey(), {});          // parola -> punteggio di debolezza
+let history = load('tp.history', []);    // [{t, wpm, acc, mode, lang}]
+function weakWords() { return Object.keys(weak); }
+
+function newGame() {
+  clearInterval(g && g.timer);
+  const pool = WORDS[state.lang];
+  g = {
+    pool, queue: [], idx: 0, buf: '', wordBad: false,
+    started: false, ended: false, t0: 0, timer: null,
+    keys: 0, keysOk: 0, correctChars: 0, wordsOk: 0,
+    retry: new Set(), missCount: {}
+  };
+  while (g.queue.length < 40) g.queue.push(rand());
+  $('sTime').textContent = state.mode || '∞';
+  $('sWpm').textContent = 0; $('sAcc').textContent = '100%'; $('sPending').textContent = 0;
+  setHint('Inizia a scrivere: il timer parte al primo tasto. Backspace disabilitato.');
+  $('game').style.display = ''; $('result').style.display = 'none';
+  render();
+}
+function rand() {
+  const w = weakWords();
+  // con punti deboli: 35% delle parole (100% in modalità "solo deboli") vengono da lì
+  if (w.length >= 3 && (state.weakOnly || Math.random() < 0.35)) return w[Math.floor(Math.random() * w.length)];
+  return g.pool[Math.floor(Math.random() * g.pool.length)];
+}
+function setHint(t, bad) { const h = $('hint'); h.textContent = t; h.className = bad ? 'bad' : ''; }
+
+function render() {
+  const q = $('queue'); q.innerHTML = '';
+  const cur = g.queue[g.idx];
+  // finestra: mostra la parola corrente e le successive
+  for (let i = g.idx; i < Math.min(g.idx + 24, g.queue.length); i++) {
+    const w = g.queue[i];
+    const s = document.createElement('span');
+    s.className = 'w' + (i === g.idx ? ' cur' : '') + (g.retry.has(w) ? ' retry' : '');
+    if (i === g.idx) {
+      for (let k = 0; k < Math.max(w.length, g.buf.length); k++) {
+        const c = document.createElement('span');
+        if (k < w.length) {
+          c.textContent = w[k];
+          if (k < g.buf.length) c.className = g.buf[k] === w[k] ? 'c-ok' : 'c-bad';
+        } else { c.textContent = g.buf[k]; c.className = 'c-extra'; }
+        s.appendChild(c);
+      }
+    } else s.textContent = w;
+    q.appendChild(s); q.appendChild(document.createTextNode(' '));
+  }
+  $('sPending').textContent = g.retry.size;
+  $('weakN').textContent = weakWords().length;
+}
+
+function stats() {
+  const el = g.started ? (Date.now() - g.t0) / 60000 : 0;
+  const wpm = el > 0 ? Math.round((g.correctChars / 5) / el) : 0;
+  const acc = g.keys ? Math.round(100 * g.keysOk / g.keys) : 100;
+  return { wpm, acc };
+}
+function tick() {
+  const elapsed = (Date.now() - g.t0) / 1000;
+  if (state.mode) {
+    const left = Math.max(0, Math.ceil(state.mode - elapsed));
+    $('sTime').textContent = left;
+    if (left <= 0) return endGame();
+  } else $('sTime').textContent = Math.floor(elapsed);
+  const s = stats(); $('sWpm').textContent = s.wpm; $('sAcc').textContent = s.acc + '%';
+}
+function start() {
+  g.started = true; g.t0 = Date.now();
+  g.timer = setInterval(tick, 200);
+}
+
+function submitWord() {
+  const word = g.queue[g.idx];
+  const ok = g.buf === word && !g.wordBad;
+  if (ok) {
+    g.wordsOk++; g.correctChars += word.length + 1;
+    if (weak[word]) { if (--weak[word] <= 0) delete weak[word]; save(weakKey(), weak); }
+    if (g.retry.delete(word)) setHint(`Bene, "${word}" recuperata.`);
+    else setHint('');
+  } else {
+    weak[word] = Math.min(6, (weak[word] || 0) + 2); save(weakKey(), weak);
+    g.retry.add(word);
+    g.missCount[word] = (g.missCount[word] || 0) + 1;
+    // la parola torna fra 2-4 posizioni
+    const at = Math.min(g.queue.length, g.idx + 1 + 2 + Math.floor(Math.random() * 3));
+    g.queue.splice(at, 0, word);
+    setHint(`Errore su "${word}": tornerà fra poco.`, true);
+  }
+  g.idx++; g.buf = ''; g.wordBad = false;
+  while (g.queue.length < g.idx + 40) g.queue.push(rand());
+  render();
+}
+
+function endGame() {
+  if (g.ended) return;
+  g.ended = true; clearInterval(g.timer);
+  const s = stats();
+  if (g.keys > 0) {
+    history.push({ t: Date.now(), wpm: s.wpm, acc: s.acc, mode: state.mode, lang: state.lang });
+    history = history.slice(-100); save('tp.history', history);
+  }
+  const missed = Object.entries(g.missCount).sort((a, b) => b[1] - a[1]);
+  $('game').style.display = 'none';
+  const r = $('result'); r.style.display = 'block';
+  r.innerHTML = `
+    <h2>Risultato</h2>
+    <div class="big">${s.wpm} <span style="font-size:18px;color:var(--muted)">WPM</span></div>
+    <p>Accuratezza <b>${s.acc}%</b> · Parole corrette <b>${g.wordsOk}</b> · Parole sbagliate <b>${missed.reduce((a, m) => a + m[1], 0)}</b></p>
+    <h3>Parole su cui hai sbagliato</h3>
+    <div class="missed">${missed.length
+      ? missed.map(([w, n]) => `<span>${w}${n > 1 ? ' ×' + n : ''}</span>`).join('')
+      : '<span style="background:none">Nessuna, perfetto!</span>'}</div>
+    <h3>Storico (ultime sessioni)</h3>
+    ${chart()}
+    <p style="color:var(--muted)">Parole deboli salvate: <b>${weakWords().length}</b> · Premi Tab per ricominciare.</p>`;
+}
+
+function chart() {
+  const h = history.slice(-30);
+  if (h.length < 2) return '<p style="color:var(--muted)">Servono almeno 2 sessioni per vedere il grafico.</p>';
+  const W = 700, H = 160, P = 28;
+  const x = i => P + i * (W - 2 * P) / (h.length - 1);
+  const maxW = Math.max(20, ...h.map(d => d.wpm)) * 1.1;
+  const yW = v => H - P - v / maxW * (H - 2 * P);
+  const yA = v => H - P - Math.max(0, v - 50) / 50 * (H - 2 * P); // accuratezza: scala 50-100%
+  const line = (f, k) => h.map((d, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${f(d[k]).toFixed(1)}`).join('');
+  const dots = (f, k, c) => h.map((d, i) => `<circle cx="${x(i)}" cy="${f(d[k])}" r="3" fill="${c}"><title>${new Date(d.t).toLocaleString()} · ${d.wpm} WPM · ${d.acc}%</title></circle>`).join('');
+  const best = Math.max(...history.map(d => d.wpm));
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto" role="img" aria-label="Storico WPM e accuratezza">
+    <line x1="${P}" y1="${H - P}" x2="${W - P}" y2="${H - P}" stroke="var(--line)"/>
+    <path d="${line(yA, 'acc')}" fill="none" stroke="var(--ok)" stroke-width="2"/>${dots(yA, 'acc', 'var(--ok)')}
+    <path d="${line(yW, 'wpm')}" fill="none" stroke="var(--accent)" stroke-width="2.5"/>${dots(yW, 'wpm', 'var(--accent)')}
+    <text x="${P}" y="14" fill="var(--accent)" font-size="12">● WPM (max ${maxW.toFixed(0)})</text>
+    <text x="${P + 150}" y="14" fill="var(--ok)" font-size="12">● Accuratezza (50–100%)</text>
+  </svg>
+  <p style="color:var(--muted);margin:4px 0">Record personale: <b>${best} WPM</b> · Ultima: <b>${h.at(-1).wpm} WPM</b> · Media ultime ${h.length}: <b>${Math.round(h.reduce((a, d) => a + d.wpm, 0) / h.length)} WPM</b></p>`;
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Tab') { e.preventDefault(); return newGame(); }
+  if (e.key === 'Escape') { if (g.started && !g.ended) endGame(); return; }
+  if (g.ended || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.key === 'Backspace' || e.key === 'Delete') { e.preventDefault(); return; }
+  if (e.key === ' ' || e.key === 'Enter') {
+    e.preventDefault();
+    if (g.buf.length) submitWord();
+    return;
+  }
+  if (e.key.length !== 1) return;
+  e.preventDefault();
+  if (!g.started) start();
+  const word = g.queue[g.idx];
+  const k = g.buf.length;
+  g.keys++;
+  if (k < word.length && e.key === word[k]) g.keysOk++; else g.wordBad = true;
+  if (g.buf.length < word.length + 5) g.buf += e.key;
+  render();
+});
+
+document.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => {
+  state.mode = +b.dataset.mode;
+  document.querySelectorAll('[data-mode]').forEach(x => x.classList.toggle('active', x === b));
+  b.blur(); newGame();
+});
+$('weakBtn').onclick = e => {
+  state.weakOnly = !state.weakOnly;
+  e.currentTarget.classList.toggle('active', state.weakOnly);
+  e.currentTarget.blur(); newGame();
+};
+document.querySelectorAll('[data-lang]').forEach(b => b.onclick = () => {
+  state.lang = b.dataset.lang; weak = load(weakKey(), {});
+  document.querySelectorAll('[data-lang]').forEach(x => x.classList.toggle('active', x === b));
+  b.blur(); newGame();
+});
+$('restart').onclick = e => { e.target.blur(); newGame(); };
+$('finish').onclick = e => { e.target.blur(); if (g.started) endGame(); };
+
+newGame();
+</script>
+</body>
+</html>

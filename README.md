@@ -34,7 +34,7 @@ Alla **4ª volta** che sbagli la stessa parola nella sessione (e poi alla 8ª, 1
 ### Dita
 Il pulsante **Dita** mostra, sotto il testo, la tastiera con il prossimo tasto evidenziato e il dito da usare (disposizione QWERTY standard a dieci dita). Si può spegnere. Con le parole italiane compaiono anche i tasti accentati della tastiera italiana (`è ì ò à ù`, tutti mignolo destro; `é` = Maiusc + `è`).
 
-I caratteri accentati si possono scrivere anche con Option (Mac) o AltGr (Windows): solo Cmd e Ctrl sono trattati come scorciatoie.
+I caratteri accentati si possono scrivere anche con tasti morti (Mac con tastiera americana: Option+` e poi la vocale), Option o AltGr: l'app li riceve da un campo di testo nascosto sempre a fuoco, mentre Cmd e Ctrl restano scorciatoie.
 
 ### Fine sessione
 Alla fine vedi WPM, accuratezza, le parole sbagliate e il grafico delle ultime sessioni (WPM e accuratezza), con record personale e media.

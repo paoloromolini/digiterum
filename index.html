@@ -32,6 +32,7 @@
   .train-tag { display: none; padding: 2px 10px; border-radius: 999px; font-size: 13px; margin-left: 8px;
                background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
   .weak-mode .train-tag { display: inline-block; }
+  #kbIn { position: fixed; left: 0; top: 0; width: 1px; height: 1px; opacity: 0; border: 0; padding: 0; font-size: 16px; }
   #game { position: relative; }
   #react { position: absolute; top: 8px; right: 16px; pointer-events: none; font-weight: 700; z-index: 2; }
   #react span { display: inline-block; animation: pop .9s ease-out forwards; }
@@ -116,6 +117,7 @@
 </style>
 </head>
 <body>
+<input id="kbIn" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="Campo di digitazione" tabindex="-1">
 <main>
   <h1 style="margin-bottom:0">Digiterum<span class="train-tag">Allenamento · senza punteggio</span></h1>
   <p style="margin:0 0 16px;color:var(--muted)">sbagliando si impara</p>
@@ -321,6 +323,7 @@ function closeHelp() {
   if (g.started && !g.drill && !g.ended) g.t0 += Date.now() - g.helpSince;
   g.helpSince = 0;
   $('help').style.display = 'none';
+  setTimeout(() => typeof focusInput === 'function' && focusInput(), 0);
 }
 function tick() {
   if (g.drill || g.helpSince) return;   // timer in pausa durante esercizio o aiuto
@@ -613,11 +616,16 @@ function drillKey(e) {
     return;
   }
   if (e.key.length !== 1 || isShortcut(e)) return;
+  drillChar(e.key);
+}
+function drillChar(ch) {
+  const d = g.drill;
+  if (!d || d.phase !== 'reps') return;
   const info = $('drillInfo');
-  keySound(e.key === d.word[d.buf.length]);
-  if (e.key === d.word[d.buf.length]) {
+  keySound(ch === d.word[d.buf.length]);
+  if (ch === d.word[d.buf.length]) {
     info.classList.remove('bad');
-    d.buf += e.key;
+    d.buf += ch;
     if (d.buf.length === d.word.length) {
       d.done++; d.buf = '';
       if (d.done >= DRILL_REPS) return endDrill();
@@ -730,6 +738,7 @@ document.addEventListener('keydown', e => {
     return;
   }
   if (e.key === 'F1' || (e.key === '?' && !g.drill)) { e.preventDefault(); return openHelp(); }
+  if (!isShortcut(e) && routeCompose(e)) return;
   if (g.drill) return drillKey(e);   // durante l'esercizio tutto il resto è bloccato
   if (e.key === 'Tab') { e.preventDefault(); return newGame(); }
   if (e.key === 'Escape') { if (g.started && !g.ended) endGame(); return; }
@@ -742,21 +751,63 @@ document.addEventListener('keydown', e => {
   }
   if (e.key.length !== 1) return;
   e.preventDefault();
+  gameChar(e.key);
+});
+
+function gameChar(ch) {
+  if (g.ended) return;
   if (!g.started) start();
   const word = g.queue[g.idx];
   const k = g.buf.length;
   g.keys++;
-  const hit = k < word.length && e.key === word[k];
+  const hit = k < word.length && ch === word[k];
   if (hit) g.keysOk++; else g.wordBad = true;
   keySound(hit);
   if (g.buf.length < word.length + 5) {
     const now = performance.now();
     if (!g.rec.length) g.recT0 = now;
-    g.rec.push({ k: e.key, t: now - g.recT0 });
-    g.buf += e.key;
+    g.rec.push({ k: ch, t: now - g.recT0 });
+    g.buf += ch;
   }
   render();
+}
+
+// --- caratteri accentati / tasti morti (es. Option+` poi la vocale su Mac) ---
+// Il browser li consegna in modo affidabile solo a un campo di testo: un <input> nascosto sempre a fuoco.
+// I caratteri ASCII restano gestiti da keydown; accenti e composizioni arrivano da qui.
+const inp = $('kbIn');
+let dead = false, composing = false, fallbackT = null;
+const MODS = ['Shift', 'Alt', 'Control', 'Meta', 'CapsLock', 'AltGraph'];
+const focusInput = () => inp.focus({ preventScroll: true });
+function onChar(ch) {
+  if (g.helpSince || g.ended) return;
+  if (g.drill) drillChar(ch); else gameChar(ch);
+}
+function feed(text) {
+  clearTimeout(fallbackT);
+  inp.value = '';
+  for (const ch of text) onChar(ch);
+}
+// true = il tasto verrà consegnato dall'input nascosto, keydown non deve farci nulla
+function routeCompose(e) {
+  if (MODS.includes(e.key)) return false;
+  if (e.key === 'Dead') { dead = true; return true; }
+  const viaInput = dead || e.isComposing || e.keyCode === 229 || (e.key.length === 1 && e.key > '~');
+  if (!viaInput) return false;
+  dead = false;
+  clearTimeout(fallbackT);
+  // rete di sicurezza: se l'input non consegna nulla entro 200ms, usa il carattere del tasto
+  if (e.key.length === 1) fallbackT = setTimeout(() => onChar(e.key), 200);
+  return true;
+}
+inp.addEventListener('compositionstart', () => { composing = true; });
+inp.addEventListener('compositionend', e => { composing = false; dead = false; if (e.data) feed(e.data); else inp.value = ''; });
+inp.addEventListener('input', e => {
+  if (composing) return;
+  if (e.inputType === 'insertText' && e.data) feed(e.data); else inp.value = '';
 });
+document.addEventListener('click', () => setTimeout(focusInput, 0));
+window.addEventListener('focus', focusInput);
 
 document.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => {
   state.mode = +b.dataset.mode;
@@ -788,6 +839,7 @@ $('finish').onclick = e => { e.target.blur(); if (g.started) endGame(); };
 try { navigator.storage?.persist?.(); } catch {}
 
 newGame();
+focusInput();
 </script>
 </body>
 </html>

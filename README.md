@@ -32,7 +32,9 @@ Alla **4ª volta** che sbagli la stessa parola nella sessione (e poi alla 8ª, 1
 2. **Ripetizioni**: devi scrivere la parola **4 volte di fila** senza errori. Un errore azzera il conteggio. Una tastiera con i tasti colorati per dito indica il prossimo tasto e quale dito usare.
 
 ### Dita
-Il pulsante **Dita** mostra, sotto il testo, la tastiera con il prossimo tasto evidenziato e il dito da usare (disposizione QWERTY standard a dieci dita). Si può spegnere.
+Il pulsante **Dita** mostra, sotto il testo, la tastiera con il prossimo tasto evidenziato e il dito da usare (disposizione QWERTY standard a dieci dita). Si può spegnere. Con le parole italiane compaiono anche i tasti accentati della tastiera italiana (`è ì ò à ù`, tutti mignolo destro; `é` = Maiusc + `è`).
+
+I caratteri accentati si possono scrivere anche con Option (Mac) o AltGr (Windows): solo Cmd e Ctrl sono trattati come scorciatoie.
 
 ### Fine sessione
 Alla fine vedi WPM, accuratezza, le parole sbagliate e il grafico delle ultime sessioni (WPM e accuratezza), con record personale e media.

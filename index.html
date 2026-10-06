@@ -410,15 +410,21 @@ const KB_ROWS = [
 ];
 const fingerOf = {};
 KB_ROWS.forEach(r => [...r.keys].forEach((k, i) => fingerOf[k] = r.fingers[i]));
+// tasti accentati della tastiera italiana (tutti mignolo destro): visibili solo con le parole italiane
+const ACCENT_KEYS = [{ row: 0, keys: 'èì' }, { row: 1, keys: 'òàù' }];
+const KEY_ALIAS = { 'é': 'è' };            // é = Maiusc + è
+ACCENT_KEYS.forEach(a => [...a.keys].forEach(k => fingerOf[k] = 7));
+fingerOf['é'] = 7;
 const fingerColor = f => `hsl(${f * 45} 70% 55% / .22)`;
 
 function buildKeyboard(kb) {
-  kb.innerHTML = '';
-  KB_ROWS.forEach(r => {
+  kb.innerHTML = ''; kb.dataset.lang = state.lang;
+  KB_ROWS.forEach((r, ri) => {
     const row = document.createElement('div'); row.className = 'row'; row.style.marginLeft = r.pad + 'px';
-    [...r.keys].forEach((k, i) => {
+    const extra = state.lang === 'it' ? (ACCENT_KEYS.find(a => a.row === ri)?.keys || '') : '';
+    [...r.keys + extra].forEach((k, i) => {
       const d = document.createElement('div'); d.className = 'key'; d.dataset.k = k; d.textContent = k;
-      d.style.background = fingerColor(r.fingers[i]); row.appendChild(d);
+      d.style.background = fingerColor(r.fingers[i] ?? 7); row.appendChild(d);
     });
     kb.appendChild(row);
   });
@@ -448,7 +454,9 @@ function showReps() {
 let rpTimer = null;
 const esc = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const KB_POS = {};
-KB_ROWS.forEach((r, ri) => [...r.keys].forEach((k, i) => KB_POS[k] = { x: i + r.pad / 54, y: ri }));
+KB_ROWS.forEach((r, ri) => [...r.keys + (ACCENT_KEYS.find(a => a.row === ri)?.keys || '')]
+  .forEach((k, i) => KB_POS[k] = { x: i + r.pad / 54, y: ri }));
+KB_POS['é'] = KB_POS['è'];
 const isNear = (a, b) => KB_POS[a] && KB_POS[b] &&
   Math.hypot(KB_POS[a].x - KB_POS[b].x, KB_POS[a].y - KB_POS[b].y) <= 1.45;
 const fingerName = ch => fingerOf[ch] !== undefined ? FINGERS[fingerOf[ch]] : ch === ' ' ? 'pollici' : 'altro tasto';
@@ -532,7 +540,7 @@ function playReplay() {
     const gap = i ? a.keys[i].t - a.keys[i - 1].t : 0;
     clearHits();
     clockClick(i);
-    const key = [...document.querySelectorAll('#kb .key')].find(x => x.dataset.k === k);
+    const key = [...document.querySelectorAll('#kb .key')].find(x => x.dataset.k === (KEY_ALIAS[k] || k));
     if (key) key.classList.add(ok ? 'hit-ok' : 'hit-bad');
     if (!ok && exp) markNext($('kb'), exp);
     const span = document.createElement('span');
@@ -566,7 +574,7 @@ function drillRender() {
 // evidenzia il tasto `ch` sulla tastiera `kb`
 function markNext(kb, ch) {
   kb.querySelectorAll('.key.next').forEach(k => k.classList.remove('next'));
-  const key = [...kb.querySelectorAll('.key')].find(k => k.dataset.k === ch);
+  const key = [...kb.querySelectorAll('.key')].find(k => k.dataset.k === (KEY_ALIAS[ch] || ch));
   if (key) key.classList.add('next');
 }
 // "PROSSIMO [lettera] → [dito]"; usato sia nel drill sia nella modalità base
@@ -574,7 +582,8 @@ function nextHtml(ch) {
   const f = fingerOf[ch];
   return f !== undefined
     ? `<span class="lbl">Prossimo</span><span class="nk">${ch}</span><span class="arrow">→</span>` +
-      `<span class="nf" style="background:hsl(${f * 45} 70% 55% / .35)">${FINGERS[f]}</span>`
+      `<span class="nf" style="background:hsl(${f * 45} 70% 55% / .35)">${FINGERS[f]}</span>` +
+      (ch === 'é' ? `<span class="lbl">con Maiusc</span>` : '')
     : `<span class="lbl">Prossimo</span><span class="nk">${ch === ' ' ? '␣' : ch}</span>` +
       (ch === ' ' ? `<span class="arrow">→</span><span class="nf">pollici</span>` : '');
 }
@@ -586,12 +595,14 @@ function baseHelp() {
   $('fingersBtn').classList.toggle('active', showFingers);
   if (!showFingers) return;
   const kb = $('kbBase');
-  if (!kb.firstChild) buildKeyboard(kb);
+  if (!kb.firstChild || kb.dataset.lang !== state.lang) buildKeyboard(kb);   // ricostruita se cambia la lingua (tasti accentati)
   const w = g.queue[g.idx];
   const next = g.buf.length < w.length ? w[g.buf.length] : ' ';
   markNext(kb, next);
   $('baseInfo').innerHTML = nextHtml(next);
 }
+// Cmd/Ctrl sono scorciatoie; Option (Mac) e AltGr (Windows) servono invece a scrivere caratteri accentati
+const isShortcut = e => e.metaKey || (e.ctrlKey && !e.getModifierState('AltGraph'));
 function drillKey(e) {
   e.preventDefault();
   const d = g.drill;
@@ -601,7 +612,7 @@ function drillKey(e) {
     else if (e.key.toLowerCase() === 'm') toggleSound();
     return;
   }
-  if (e.key.length !== 1 || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.key.length !== 1 || isShortcut(e)) return;
   const info = $('drillInfo');
   keySound(e.key === d.word[d.buf.length]);
   if (e.key === d.word[d.buf.length]) {
@@ -722,7 +733,7 @@ document.addEventListener('keydown', e => {
   if (g.drill) return drillKey(e);   // durante l'esercizio tutto il resto è bloccato
   if (e.key === 'Tab') { e.preventDefault(); return newGame(); }
   if (e.key === 'Escape') { if (g.started && !g.ended) endGame(); return; }
-  if (g.ended || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (g.ended || isShortcut(e)) return;
   if (e.key === 'Backspace' || e.key === 'Delete') { e.preventDefault(); return; }
   if (e.key === ' ' || e.key === 'Enter') {
     e.preventDefault();

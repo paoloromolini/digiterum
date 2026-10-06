@@ -16,6 +16,11 @@ Apri `index.html` nel browser. Nessuna installazione né dipendenze. Dentro l'ap
 - **Lingue**: parole in inglese o italiano.
 - **Suoni**: click a ogni tasto giusto, tonfo sordo su quello sbagliato (sintetizzati, nessun file audio). Il pulsante **Suono** li spegne.
 
+### Reazioni e medaglie
+- Ogni parola ha una reazione: un commento se è giusta, un "Ops!" con la scheda che trema se è sbagliata. Ogni **5 parole di fila** giuste compare la serie 🔥 con un breve suono. La serie corrente è nelle statistiche in alto.
+- A fine partita (almeno 10 parole) ricevi una medaglia: 🥉 bronzo **20 WPM e 85% di accuratezza**, 🥈 argento **30 WPM e 93%**, 🥇 oro **40 WPM e 97%**.
+- Badge extra: 🎯 Cecchino (zero errori), 🔥 serie da 10+, 💪 Recuperatore (almeno 3 parole riprese), 🏆 nuovo record personale.
+
 ### Punti deboli
 - Le parole sbagliate vengono salvate e riproposte nelle sessioni successive (circa il 35% delle parole, quando ne hai almeno 3).
 - Ogni errore dà 2 punti di debolezza alla parola (massimo 6), ogni scrittura corretta ne toglie 1. A zero la parola esce dalla lista.

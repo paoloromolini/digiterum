@@ -27,6 +27,18 @@
   button:hover { border-color: var(--accent); }
   .stats { display: flex; gap: 24px; margin-bottom: 12px; color: var(--muted); }
   .stats b { color: var(--text); font-size: 22px; font-variant-numeric: tabular-nums; }
+  #game { position: relative; }
+  #react { position: absolute; top: 8px; right: 16px; pointer-events: none; font-weight: 700; z-index: 2; }
+  #react span { display: inline-block; animation: pop .9s ease-out forwards; }
+  #react .good { color: var(--ok); } #react .bad { color: var(--bad); }
+  #react .big { font-size: 24px; }
+  @keyframes pop { 0% { opacity: 0; transform: translateY(8px) scale(.8); } 15% { opacity: 1; transform: translateY(0) scale(1.15); }
+                   70% { opacity: 1; } 100% { opacity: 0; transform: translateY(-12px); } }
+  #game.shake { animation: shake .3s; border-color: var(--bad); }
+  .medal { font-size: 80px; line-height: 1.1; animation: bounce .7s ease-out; }
+  @keyframes bounce { 0% { transform: scale(0) rotate(-30deg); } 60% { transform: scale(1.25) rotate(8deg); } 100% { transform: scale(1) rotate(0); } }
+  .badges span { display: inline-block; margin: 3px 6px 3px 0; padding: 3px 10px; border-radius: 999px;
+                 background: color-mix(in srgb, var(--accent) 14%, transparent); font-size: 14px; }
   .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 28px 24px; }
   #queue { font: 24px/1.8 ui-monospace, Menlo, monospace; word-spacing: 4px; min-height: 130px; overflow: hidden; }
   #queue span.w { padding: 2px 4px; border-radius: 4px; }
@@ -123,9 +135,11 @@
     <div>WPM<br><b id="sWpm">0</b></div>
     <div>Accuratezza<br><b id="sAcc">100%</b></div>
     <div>Da ripetere<br><b id="sPending">0</b></div>
+    <div>Serie<br><b id="sStreak">0</b></div>
   </div>
 
   <div class="card" id="game">
+    <div id="react"></div>
     <div id="queue"></div>
     <div id="hint">Inizia a scrivere: il timer parte al primo tasto. Backspace disabilitato.</div>
     <div id="baseHelp"><div id="baseInfo"></div><div id="kbBase" class="kbd compact"></div></div>
@@ -144,7 +158,13 @@
         <li>Una parola bocciata <b>torna dopo 2-4 parole</b> (sottolineata in rosso) finché non la scrivi giusta.</li>
         <li>Il timer parte al <b>primo tasto</b>. Scegli <b>60s</b>, <b>30s</b> o <b>Libera</b> (senza timer, chiudi tu con Esc).</li>
         <li>Il WPM conta solo le parole corrette (5 caratteri = 1 parola).</li>
+        <li><b>Reazioni</b>: un commento a ogni parola, un trofeo di <b>serie</b> ogni 5 parole di fila giuste e la scheda che trema se sbagli.</li>
         <li><b>Suoni</b>: un click a ogni tasto giusto e un tonfo sordo su quello sbagliato. Il pulsante <b>Suono</b> li spegne.</li>
+      </ul>
+      <h3>Medaglie</h3>
+      <ul>
+        <li>A fine partita (almeno 10 parole): 🥉 bronzo <b>20 WPM e 85%</b>, 🥈 argento <b>30 WPM e 93%</b>, 🥇 oro <b>40 WPM e 97%</b>.</li>
+        <li>Badge extra: 🎯 zero errori, 🔥 serie da 10+, 💪 almeno 3 parole recuperate, 🏆 nuovo record personale.</li>
       </ul>
       <h3>Punti deboli</h3>
       <ul>
@@ -229,11 +249,13 @@ function newGame() {
     started: false, ended: false, t0: 0, timer: null,
     keys: 0, keysOk: 0, correctChars: 0, wordsOk: 0,
     retry: new Set(), missCount: {},
+    streak: 0, bestStreak: 0, recovered: 0,
     rec: [], recT0: 0, attempts: {}   // registrazione tasti del tentativo corrente / tentativi sbagliati per parola
   };
   while (g.queue.length < 40) g.queue.push(rand());
   $('sTime').textContent = state.mode || '∞';
-  $('sWpm').textContent = 0; $('sAcc').textContent = '100%'; $('sPending').textContent = 0;
+  $('sWpm').textContent = 0; $('sAcc').textContent = '100%'; $('sPending').textContent = 0; $('sStreak').textContent = 0;
+  $('react').innerHTML = '';
   setHint('Inizia a scrivere: il timer parte al primo tasto. Backspace disabilitato.');
   $('game').style.display = ''; $('result').style.display = 'none'; $('drill').style.display = 'none';
   render();
@@ -266,7 +288,7 @@ function render() {
     } else s.textContent = w;
     q.appendChild(s); q.appendChild(document.createTextNode(' '));
   }
-  $('sPending').textContent = g.retry.size;
+  $('sPending').textContent = g.retry.size; $('sStreak').textContent = g.streak;
   $('weakN').textContent = weakWords().length;
   baseHelp();
 }
@@ -305,16 +327,52 @@ function start() {
   g.timer = setInterval(tick, 200);
 }
 
+// --- reazioni ---
+const MSG = {
+  good: ['Perfetto!', 'Ottimo!', 'Bravo!', 'Pulita! ✨', 'Preciso! 🎯', 'Così! 👏'],
+  back: ['Recuperata! 💪', 'Ora sì! ✅', 'Imparata! 🧠'],
+  bad:  ['Ops! 😬', 'Quasi… 🤏', 'Occhio! 👀', 'Tornerà! 🔁', 'Niente paura 🙂']
+};
+const pick = a => a[Math.floor(Math.random() * a.length)];
+function react(text, cls) {
+  const el = $('react'); el.innerHTML = '';
+  const sp = document.createElement('span'); sp.className = cls; sp.textContent = text; el.appendChild(sp);
+}
+function shakeCard() { const c = $('game'); c.classList.remove('shake'); void c.offsetWidth; c.classList.add('shake'); }
+const chime = () => { beep(880, 0.09, 0.1, 'sine'); setTimeout(() => beep(1320, 0.12, 0.1, 'sine'), 90); };
+
+// --- medaglie a fine partita ---
+function medalFor(s, total) {
+  if (total < 10) return { icon: '⏱️', title: 'Sessione troppo breve', why: 'Servono almeno 10 parole per guadagnare una medaglia.' };
+  if (s.acc >= 97 && s.wpm >= 40) return { icon: '🥇', title: 'Oro', why: `${s.wpm} WPM con ${s.acc}% di accuratezza.` };
+  if (s.acc >= 93 && s.wpm >= 30) return { icon: '🥈', title: 'Argento', why: `${s.wpm} WPM con ${s.acc}% di accuratezza. Per l'oro: 40 WPM e 97%.` };
+  if (s.acc >= 85 && s.wpm >= 20) return { icon: '🥉', title: 'Bronzo', why: `${s.wpm} WPM con ${s.acc}% di accuratezza. Per l'argento: 30 WPM e 93%.` };
+  return { icon: '🎖️', title: 'Continua così', why: 'Per il bronzo: 20 WPM e 85% di accuratezza. Sbagliando si impara!' };
+}
+function badgesFor(s, total, prevBest) {
+  const b = [];
+  if (total >= 10 && s.acc === 100) b.push('🎯 Cecchino: zero errori');
+  if (g.bestStreak >= 10) b.push(`🔥 Serie da ${g.bestStreak}`);
+  if (g.recovered >= 3) b.push(`💪 Recuperatore: ${g.recovered} parole riprese`);
+  if (total >= 10 && prevBest > 0 && s.wpm > prevBest) b.push('🏆 Nuovo record personale');
+  return b;
+}
+
 function submitWord() {
   const word = g.queue[g.idx];
   const ok = g.buf === word && !g.wordBad;
   if (ok) {
     g.wordsOk++; g.correctChars += word.length + 1;
     if (weak[word]) { if (--weak[word] <= 0) delete weak[word]; save(weakKey(), weak); }
-    if (g.retry.delete(word)) setHint(`Bene, "${word}" recuperata.`);
-    else setHint('');
+    const wasRetry = g.retry.delete(word);
+    g.streak++; g.bestStreak = Math.max(g.bestStreak, g.streak);
+    if (wasRetry) { g.recovered++; setHint(`Bene, "${word}" recuperata.`); } else setHint('');
+    if (g.streak % 5 === 0) { react(`🔥 Serie di ${g.streak}!`, 'good big'); chime(); }
+    else react(wasRetry ? pick(MSG.back) : pick(MSG.good), 'good');
   } else {
     weak[word] = Math.min(6, (weak[word] || 0) + 2); save(weakKey(), weak);
+    g.streak = 0;
+    react(pick(MSG.bad), 'bad'); shakeCard();
     g.retry.add(word);
     g.missCount[word] = (g.missCount[word] || 0) + 1;
     (g.attempts[word] ||= []).push({ typed: g.buf, keys: g.rec });
@@ -572,8 +630,12 @@ function endGame() {
   if (g.ended) return;
   g.ended = true; clearInterval(g.timer);
   const s = stats();
+  const missTotal = Object.values(g.missCount).reduce((a, n) => a + n, 0);
+  const total = g.wordsOk + missTotal;
+  const prevBest = Math.max(0, ...history.map(d => d.wpm));
+  const medal = medalFor(s, total), badges = badgesFor(s, total, prevBest);
   if (g.keys > 0) {
-    history.push({ t: Date.now(), wpm: s.wpm, acc: s.acc, mode: state.mode, lang: state.lang });
+    history.push({ t: Date.now(), wpm: s.wpm, acc: s.acc, mode: state.mode, lang: state.lang, medal: medal.icon });
     history = history.slice(-100); save('tp.history', history);
   }
   const missed = Object.entries(g.missCount).sort((a, b) => b[1] - a[1]);
@@ -581,6 +643,12 @@ function endGame() {
   const r = $('result'); r.style.display = 'block';
   r.innerHTML = `
     <h2>Risultato</h2>
+    <div style="text-align:center">
+      <div class="medal">${medal.icon}</div>
+      <h3 style="margin:4px 0">${medal.title}</h3>
+      <p style="color:var(--muted);margin:0 0 8px">${medal.why}</p>
+      <div class="badges">${badges.map(x => `<span>${x}</span>`).join('')}</div>
+    </div>
     <div class="big">${s.wpm} <span style="font-size:18px;color:var(--muted)">WPM</span></div>
     <p>Accuratezza <b>${s.acc}%</b> · Parole corrette <b>${g.wordsOk}</b> · Parole sbagliate <b>${missed.reduce((a, m) => a + m[1], 0)}</b></p>
     <h3>Parole su cui hai sbagliato</h3>
@@ -653,6 +721,7 @@ document.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => {
   document.querySelectorAll('[data-mode]').forEach(x => x.classList.toggle('active', x === b));
   b.blur(); newGame();
 });
+$('game').addEventListener('animationend', e => { if (e.animationName === 'shake') $('game').classList.remove('shake'); });
 $('helpBtn').onclick = e => { e.currentTarget.blur(); openHelp(); };
 $('helpClose').onclick = closeHelp;
 $('fingersBtn').onclick = e => {

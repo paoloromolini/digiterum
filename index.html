@@ -41,6 +41,12 @@
   .big { font-size: 48px; font-weight: 700; color: var(--accent); }
   #drill { display: none; position: fixed; inset: 0; z-index: 10; background: var(--bg);
            overflow-y: auto; padding: 24px 16px; }
+  #help { display: none; position: fixed; inset: 0; z-index: 20; background: var(--bg);
+          overflow-y: auto; padding: 24px 16px; }
+  #help .inner { max-width: 640px; margin: 0 auto; }
+  #help h3 { margin: 20px 0 4px; }
+  #help ul { margin: 0; padding-left: 20px; }
+  #help li { margin: 4px 0; }
   #drill .inner { max-width: 760px; margin: 0 auto; text-align: center; }
   #drill h2 { margin: 0 0 4px; }
   #drill .dots { margin: 12px 0; font-size: 28px; letter-spacing: 8px; color: var(--accent); }
@@ -104,6 +110,7 @@
     <button data-mode="0">Libera</button>
     <button id="weakBtn" title="Usa solo le parole su cui sbagli di più (servono almeno 3)">Solo punti deboli (<span id="weakN">0</span>)</button>
     <button id="fingersBtn" title="Mostra tastiera e dito da usare per il prossimo tasto">Dita</button>
+    <button id="helpBtn" title="Come funziona (F1 o ?)">? Aiuto</button>
     <span class="spacer"></span>
     <span style="color:var(--muted)">Lingua</span>
     <button data-lang="en" class="active">EN</button>
@@ -124,6 +131,43 @@
   </div>
 
   <div class="card" id="result"></div>
+
+  <div id="help" role="dialog" aria-modal="true" aria-label="Come funziona">
+    <div class="inner">
+      <h2>Come funziona</h2>
+      <p style="color:var(--muted);margin-top:0">Digiterum allena sugli errori: sbagliando si impara.</p>
+      <h3>Il gioco</h3>
+      <ul>
+        <li>Scrivi la parola evidenziata e premi <b>spazio</b> o <b>Invio</b> per confermarla.</li>
+        <li><b>Backspace è disabilitato</b>: non puoi correggere. Se sbagli anche un solo carattere la parola è bocciata.</li>
+        <li>Una parola bocciata <b>torna dopo 2-4 parole</b> (sottolineata in rosso) finché non la scrivi giusta.</li>
+        <li>Il timer parte al <b>primo tasto</b>. Scegli <b>60s</b>, <b>30s</b> o <b>Libera</b> (senza timer, chiudi tu con Esc).</li>
+        <li>Il WPM conta solo le parole corrette (5 caratteri = 1 parola).</li>
+      </ul>
+      <h3>Punti deboli</h3>
+      <ul>
+        <li>Le parole che sbagli vengono salvate e rientrano nelle sessioni successive (circa 1 parola su 3).</li>
+        <li>Ogni errore pesa 2, ogni volta che la scrivi giusta scende di 1: a zero esce dalla lista.</li>
+        <li><b>Solo punti deboli</b> usa solo quelle parole (ne servono almeno 3).</li>
+      </ul>
+      <h3>Fermati e concentrati</h3>
+      <ul>
+        <li>Alla <b>4ª volta</b> che sbagli la stessa parola nella sessione si apre un esercizio e il timer si ferma.</li>
+        <li>Prima vedi il <b>replay al rallentatore</b> dei tuoi errori: tasto premuto, tasto giusto, dita e tipo di errore.</li>
+        <li>Poi devi scrivere la parola <b>4 volte di fila</b> senza errori, guardando dove vanno le dita. Un errore azzera il conteggio.</li>
+      </ul>
+      <h3>Dita</h3>
+      <ul>
+        <li>Il pulsante <b>Dita</b> mostra una tastiera con il tasto da premere e il dito da usare (disposizione QWERTY standard a dieci dita).</li>
+      </ul>
+      <h3>Tasti</h3>
+      <ul>
+        <li><b>Spazio / Invio</b> conferma la parola · <b>Tab</b> ricomincia · <b>Esc</b> termina la sessione · <b>F1</b> o <b>?</b> apre questo aiuto.</li>
+      </ul>
+      <p style="color:var(--muted)">Statistiche, parole deboli e storico sono salvati solo in questo browser.</p>
+      <button id="helpClose" class="active">Chiudi (Esc)</button>
+    </div>
+  </div>
 
   <div id="drill" role="dialog" aria-modal="true" aria-label="Esercizio di concentrazione">
     <div class="inner">
@@ -230,8 +274,21 @@ function stats() {
   const acc = g.keys ? Math.round(100 * g.keysOk / g.keys) : 100;
   return { wpm, acc };
 }
+// aiuto: mette in pausa il timer finché è aperto
+function openHelp() {
+  if (g.helpSince) return;
+  g.helpSince = Date.now();
+  $('help').style.display = 'block'; $('helpClose').focus();
+}
+function closeHelp() {
+  if (!g.helpSince) return;
+  // durante un drill la pausa è già conteggiata da endDrill
+  if (g.started && !g.drill && !g.ended) g.t0 += Date.now() - g.helpSince;
+  g.helpSince = 0;
+  $('help').style.display = 'none';
+}
 function tick() {
-  if (g.drill) return;   // timer in pausa durante l'esercizio
+  if (g.drill || g.helpSince) return;   // timer in pausa durante esercizio o aiuto
   const elapsed = (Date.now() - g.t0) / 1000;
   if (state.mode) {
     const left = Math.max(0, Math.ceil(state.mode - elapsed));
@@ -511,6 +568,11 @@ function chart() {
 }
 
 document.addEventListener('keydown', e => {
+  if (g.helpSince) {                 // aiuto aperto: Esc/Invio/F1 chiudono, il resto è bloccato
+    if (e.key === 'Escape' || e.key === 'F1' || e.key === 'Enter') { e.preventDefault(); closeHelp(); }
+    return;
+  }
+  if (e.key === 'F1' || (e.key === '?' && !g.drill)) { e.preventDefault(); return openHelp(); }
   if (g.drill) return drillKey(e);   // durante l'esercizio tutto il resto è bloccato
   if (e.key === 'Tab') { e.preventDefault(); return newGame(); }
   if (e.key === 'Escape') { if (g.started && !g.ended) endGame(); return; }
@@ -542,6 +604,8 @@ document.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => {
   document.querySelectorAll('[data-mode]').forEach(x => x.classList.toggle('active', x === b));
   b.blur(); newGame();
 });
+$('helpBtn').onclick = e => { e.currentTarget.blur(); openHelp(); };
+$('helpClose').onclick = closeHelp;
 $('fingersBtn').onclick = e => {
   showFingers = !showFingers; save('tp.fingers', showFingers);
   e.currentTarget.blur(); baseHelp();

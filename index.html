@@ -153,7 +153,7 @@
       <h3>Fermati e concentrati</h3>
       <ul>
         <li>Alla <b>4ª volta</b> che sbagli la stessa parola nella sessione si apre un esercizio e il timer si ferma.</li>
-        <li>Prima vedi il <b>replay al rallentatore</b> dei tuoi errori: tasto premuto, tasto giusto, dita e tipo di errore.</li>
+        <li>Prima vedi il <b>replay al rallentatore</b> dei tuoi errori: tasto premuto, tasto giusto, dita e tipo di errore, con un click d'orologio a ogni tasto (<b>M</b> per spegnerlo).</li>
         <li>Poi devi scrivere la parola <b>4 volte di fila</b> senza errori, guardando dove vanno le dita. Un errore azzera il conteggio.</li>
       </ul>
       <h3>Dita</h3>
@@ -181,6 +181,7 @@
         <div class="rpBtns">
           <button id="rpAgain">Rivedi (R)</button>
           <button id="rpOther">Altro tentativo</button>
+          <button id="rpSound" title="Click d'orologio ad ogni tasto del replay (M)"></button>
           <button id="rpGo" class="active">Vai agli esercizi (Invio)</button>
         </div>
       </div>
@@ -406,6 +407,26 @@ function classify(w, t) {
   return [`Hai scritto "<b>${esc(t)}</b>" invece di "<b>${esc(w)}</b>".`];
 }
 
+// click d'orologio sintetizzato (tic-toc alternati), nessun file audio
+let audioCtx = null, soundOn = load('tp.sound', true);
+function clockClick(n) {
+  if (!soundOn) return;
+  try {
+    audioCtx ||= new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const t = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(n % 2 ? 900 : 1300, t);          // toc più grave del tic
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(0.18, t + 0.002);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.04);
+    osc.connect(gain).connect(audioCtx.destination);
+    osc.start(t); osc.stop(t + 0.05);
+  } catch {}
+}
+function soundBtn() { $('rpSound').textContent = soundOn ? '🔊 Suono' : '🔇 Suono'; $('rpSound').classList.toggle('active', soundOn); }
+
 function playReplay() {
   clearTimeout(rpTimer);
   const d = g.drill, w = d.word, a = d.attempts[d.ai];
@@ -422,6 +443,7 @@ function playReplay() {
     const { k } = a.keys[i], exp = w[i], ok = k === exp;
     const gap = i ? a.keys[i].t - a.keys[i - 1].t : 0;
     clearHits();
+    clockClick(i);
     const key = [...document.querySelectorAll('#kb .key')].find(x => x.dataset.k === k);
     if (key) key.classList.add(ok ? 'hit-ok' : 'hit-bad');
     if (!ok && exp) markNext($('kb'), exp);
@@ -488,6 +510,7 @@ function drillKey(e) {
   if (d.phase === 'replay') {
     if (e.key === 'Enter' || e.key === ' ') showReps();
     else if (e.key.toLowerCase() === 'r') playReplay();
+    else if (e.key.toLowerCase() === 'm') toggleSound();
     return;
   }
   if (e.key.length !== 1 || e.ctrlKey || e.metaKey || e.altKey) return;
@@ -511,6 +534,9 @@ function drillKey(e) {
 $('rpAgain').onclick = () => playReplay();
 $('rpOther').onclick = () => { const d = g.drill; d.ai = (d.ai - 1 + d.attempts.length) % d.attempts.length; playReplay(); };
 $('rpGo').onclick = () => showReps();
+const toggleSound = () => { soundOn = !soundOn; save('tp.sound', soundOn); soundBtn(); };
+$('rpSound').onclick = e => { e.currentTarget.blur(); toggleSound(); };
+soundBtn();
 
 function endDrill() {
   clearTimeout(rpTimer);

@@ -22,7 +22,7 @@ Apri `index.html` nel browser. Nessuna installazione né dipendenze. Dentro l'ap
 
 ### Fermati e concentrati
 Alla **4ª volta** che sbagli la stessa parola nella sessione (e poi alla 8ª, 12ª…) si apre un esercizio a schermo intero. Il timer è in pausa e le battute non contano nelle statistiche.
-1. **Replay al rallentatore** dei tuoi errori su quella parola: ogni tasto premuto compare uno alla volta, con il tasto giusto, le dita coinvolte, le esitazioni e il tipo di errore (tasto vicino o lontano, lettere invertite, lettera saltata o in più, parola troppo corta).
+1. **Replay al rallentatore** dei tuoi errori su quella parola: ogni tasto premuto compare uno alla volta, con il tasto giusto, le dita coinvolte, le esitazioni e il tipo di errore (tasto vicino o lontano, lettere invertite, lettera saltata o in più, parola troppo corta), accompagnato da un click d'orologio a ogni tasto (si spegne con `M`).
 2. **Ripetizioni**: devi scrivere la parola **4 volte di fila** senza errori. Un errore azzera il conteggio. Una tastiera con i tasti colorati per dito indica il prossimo tasto e quale dito usare.
 
 ### Dita

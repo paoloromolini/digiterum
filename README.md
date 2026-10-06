@@ -24,7 +24,7 @@ Apri `index.html` nel browser. Nessuna installazione né dipendenze. Dentro l'ap
 ### Punti deboli
 - Le parole sbagliate vengono salvate e riproposte nelle sessioni successive (circa il 35% delle parole, quando ne hai almeno 3).
 - Ogni errore dà 2 punti di debolezza alla parola (massimo 6), ogni scrittura corretta ne toglie 1. A zero la parola esce dalla lista.
-- Il pulsante **Solo punti deboli** usa soltanto quelle parole.
+- Il pulsante **Solo punti deboli** avvia un **allenamento di rinforzo**: usa soltanto quelle parole, **senza timer, WPM, medaglie né storico** (non tocca le statistiche globali). La sessione finisce da sola quando hai recuperato tutte le parole deboli, oppure con Esc, e mostra un riepilogo di quelle rimaste. Cliccando una modalità a tempo si torna al gioco normale.
 
 ### Fermati e concentrati
 Alla **4ª volta** che sbagli la stessa parola nella sessione (e poi alla 8ª, 12ª…) si apre un esercizio a schermo intero. Il timer è in pausa e le battute non contano nelle statistiche.

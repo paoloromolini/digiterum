@@ -27,6 +27,11 @@
   button:hover { border-color: var(--accent); }
   .stats { display: flex; gap: 24px; margin-bottom: 12px; color: var(--muted); }
   .stats b { color: var(--text); font-size: 22px; font-variant-numeric: tabular-nums; }
+  .weak-mode .st-run { display: none; }
+  .weak-mode [data-mode] { opacity: .45; }
+  .train-tag { display: none; padding: 2px 10px; border-radius: 999px; font-size: 13px; margin-left: 8px;
+               background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
+  .weak-mode .train-tag { display: inline-block; }
   #game { position: relative; }
   #react { position: absolute; top: 8px; right: 16px; pointer-events: none; font-weight: 700; z-index: 2; }
   #react span { display: inline-block; animation: pop .9s ease-out forwards; }
@@ -112,7 +117,7 @@
 </head>
 <body>
 <main>
-  <h1 style="margin-bottom:0">Digiterum</h1>
+  <h1 style="margin-bottom:0">Digiterum<span class="train-tag">Allenamento · senza punteggio</span></h1>
   <p style="margin:0 0 16px;color:var(--muted)">sbagliando si impara</p>
 
   <div class="bar">
@@ -120,7 +125,7 @@
     <button data-mode="60" class="active">60s</button>
     <button data-mode="30">30s</button>
     <button data-mode="0">Libera</button>
-    <button id="weakBtn" title="Usa solo le parole su cui sbagli di più (servono almeno 3)">Solo punti deboli (<span id="weakN">0</span>)</button>
+    <button id="weakBtn" title="Allenamento sulle parole su cui sbagli di più: niente timer, punteggio né statistiche">Solo punti deboli (<span id="weakN">0</span>)</button>
     <button id="fingersBtn" title="Mostra tastiera e dito da usare per il prossimo tasto">Dita</button>
     <button id="soundBtn" title="Suoni di digitazione e del replay (M nel replay)"></button>
     <button id="helpBtn" title="Come funziona (F1 o ?)">? Aiuto</button>
@@ -131,9 +136,9 @@
   </div>
 
   <div class="stats">
-    <div>Tempo<br><b id="sTime">60</b></div>
-    <div>WPM<br><b id="sWpm">0</b></div>
-    <div>Accuratezza<br><b id="sAcc">100%</b></div>
+    <div class="st-run">Tempo<br><b id="sTime">60</b></div>
+    <div class="st-run">WPM<br><b id="sWpm">0</b></div>
+    <div class="st-run">Accuratezza<br><b id="sAcc">100%</b></div>
     <div>Da ripetere<br><b id="sPending">0</b></div>
     <div>Serie<br><b id="sStreak">0</b></div>
   </div>
@@ -168,9 +173,9 @@
       </ul>
       <h3>Punti deboli</h3>
       <ul>
-        <li>Le parole che sbagli vengono salvate e rientrano nelle sessioni successive (circa 1 parola su 3).</li>
+        <li>Le parole che sbagli vengono salvate e rientrano nelle sessioni successive (circa 1 parola su 3, quando ne hai almeno 3).</li>
         <li>Ogni errore pesa 2, ogni volta che la scrivi giusta scende di 1: a zero esce dalla lista.</li>
-        <li><b>Solo punti deboli</b> usa solo quelle parole (ne servono almeno 3).</li>
+        <li><b>Solo punti deboli</b> è un <b>allenamento di rinforzo</b>: solo quelle parole, <b>senza timer, WPM, medaglie né storico</b>. Finisce da solo quando le hai recuperate tutte (o con Esc). Cliccando una modalità a tempo torni al gioco normale.</li>
       </ul>
       <h3>Fermati e concentrati</h3>
       <ul>
@@ -243,6 +248,9 @@ function weakWords() { return Object.keys(weak); }
 
 function newGame() {
   clearInterval(g && g.timer);
+  const noWeak = state.weakOnly && !weakWords().length;
+  if (noWeak) { state.weakOnly = false; $('weakBtn').classList.remove('active'); }
+  document.querySelector('main').classList.toggle('weak-mode', state.weakOnly);
   const pool = WORDS[state.lang];
   g = {
     pool, queue: [], idx: 0, buf: '', wordBad: false,
@@ -256,14 +264,16 @@ function newGame() {
   $('sTime').textContent = state.mode || '∞';
   $('sWpm').textContent = 0; $('sAcc').textContent = '100%'; $('sPending').textContent = 0; $('sStreak').textContent = 0;
   $('react').innerHTML = '';
-  setHint('Inizia a scrivere: il timer parte al primo tasto. Backspace disabilitato.');
+  setHint(noWeak ? 'Non hai ancora parole deboli: gioca una sessione normale e sbaglia (con calma) un po\' di parole.'
+    : state.weakOnly ? 'Allenamento: niente timer né punteggio. Finisce quando recuperi tutte le parole deboli (o con Esc).'
+    : 'Inizia a scrivere: il timer parte al primo tasto. Backspace disabilitato.', noWeak);
   $('game').style.display = ''; $('result').style.display = 'none'; $('drill').style.display = 'none';
   render();
 }
 function rand() {
   const w = weakWords();
   // con punti deboli: 35% delle parole (100% in modalità "solo deboli") vengono da lì
-  if (w.length >= 3 && (state.weakOnly || Math.random() < 0.35)) return w[Math.floor(Math.random() * w.length)];
+  if (w.length && (state.weakOnly || (w.length >= 3 && Math.random() < 0.35))) return w[Math.floor(Math.random() * w.length)];
   return g.pool[Math.floor(Math.random() * g.pool.length)];
 }
 function setHint(t, bad) { const h = $('hint'); h.textContent = t; h.className = bad ? 'bad' : ''; }
@@ -324,7 +334,7 @@ function tick() {
 }
 function start() {
   g.started = true; g.t0 = Date.now();
-  g.timer = setInterval(tick, 200);
+  if (!state.weakOnly) g.timer = setInterval(tick, 200);   // l'allenamento sui punti deboli non ha timer
 }
 
 // --- reazioni ---
@@ -359,11 +369,13 @@ function badgesFor(s, total, prevBest) {
 }
 
 function submitWord() {
+  let trainDone = false;
   const word = g.queue[g.idx];
   const ok = g.buf === word && !g.wordBad;
   if (ok) {
     g.wordsOk++; g.correctChars += word.length + 1;
     if (weak[word]) { if (--weak[word] <= 0) delete weak[word]; save(weakKey(), weak); }
+    trainDone = state.weakOnly && !weakWords().length;
     const wasRetry = g.retry.delete(word);
     g.streak++; g.bestStreak = Math.max(g.bestStreak, g.streak);
     if (wasRetry) { g.recovered++; setHint(`Bene, "${word}" recuperata.`); } else setHint('');
@@ -384,6 +396,7 @@ function submitWord() {
   g.idx++; g.buf = ''; g.wordBad = false; g.rec = [];
   while (g.queue.length < g.idx + 40) g.queue.push(rand());
   render();
+  if (trainDone) return endGame();
   if (!ok && g.missCount[word] % DRILL_EVERY === 0) startDrill(word);
 }
 
@@ -629,6 +642,7 @@ function endDrill() {
 function endGame() {
   if (g.ended) return;
   g.ended = true; clearInterval(g.timer);
+  if (state.weakOnly) return endTraining();
   const s = stats();
   const missTotal = Object.values(g.missCount).reduce((a, n) => a + n, 0);
   const total = g.wordsOk + missTotal;
@@ -658,6 +672,23 @@ function endGame() {
     <h3>Storico (ultime sessioni)</h3>
     ${chart()}
     <p style="color:var(--muted)">Parole deboli salvate: <b>${weakWords().length}</b> · Premi Tab per ricominciare.</p>`;
+}
+
+// riepilogo dell'allenamento: niente WPM, medaglie né storico
+function endTraining() {
+  const missTotal = Object.values(g.missCount).reduce((a, n) => a + n, 0);
+  const left = Object.entries(weak).sort((a, b) => b[1] - a[1]);
+  $('game').style.display = 'none';
+  const r = $('result'); r.style.display = 'block';
+  r.innerHTML = `
+    <h2>Allenamento completato</h2>
+    <p style="color:var(--muted)">Sessione di rinforzo: non entra nelle statistiche, nello storico né nelle medaglie.</p>
+    <p>Parole giuste <b>${g.wordsOk}</b> · Errori <b>${missTotal}</b> · Parole recuperate <b>${g.recovered}</b></p>
+    <h3>Punti deboli rimasti (${left.length})</h3>
+    <div class="missed">${left.length
+      ? left.map(([w, n]) => `<span>${w}${n > 1 ? ' ×' + n : ''}</span>`).join('')
+      : '<span style="background:none">Nessuno: li hai recuperati tutti! 🎉</span>'}</div>
+    <p style="color:var(--muted)">Premi Tab per ricominciare.</p>`;
 }
 
 function chart() {
@@ -718,6 +749,7 @@ document.addEventListener('keydown', e => {
 
 document.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => {
   state.mode = +b.dataset.mode;
+  state.weakOnly = false; $('weakBtn').classList.remove('active');
   document.querySelectorAll('[data-mode]').forEach(x => x.classList.toggle('active', x === b));
   b.blur(); newGame();
 });

@@ -110,6 +110,7 @@
     <button data-mode="0">Libera</button>
     <button id="weakBtn" title="Usa solo le parole su cui sbagli di più (servono almeno 3)">Solo punti deboli (<span id="weakN">0</span>)</button>
     <button id="fingersBtn" title="Mostra tastiera e dito da usare per il prossimo tasto">Dita</button>
+    <button id="soundBtn" title="Suoni di digitazione e del replay (M nel replay)"></button>
     <button id="helpBtn" title="Come funziona (F1 o ?)">? Aiuto</button>
     <span class="spacer"></span>
     <span style="color:var(--muted)">Lingua</span>
@@ -143,6 +144,7 @@
         <li>Una parola bocciata <b>torna dopo 2-4 parole</b> (sottolineata in rosso) finché non la scrivi giusta.</li>
         <li>Il timer parte al <b>primo tasto</b>. Scegli <b>60s</b>, <b>30s</b> o <b>Libera</b> (senza timer, chiudi tu con Esc).</li>
         <li>Il WPM conta solo le parole corrette (5 caratteri = 1 parola).</li>
+        <li><b>Suoni</b>: un click a ogni tasto giusto e un tonfo sordo su quello sbagliato. Il pulsante <b>Suono</b> li spegne.</li>
       </ul>
       <h3>Punti deboli</h3>
       <ul>
@@ -407,25 +409,40 @@ function classify(w, t) {
   return [`Hai scritto "<b>${esc(t)}</b>" invece di "<b>${esc(w)}</b>".`];
 }
 
-// click d'orologio sintetizzato (tic-toc alternati), nessun file audio
+// suoni sintetizzati (Web Audio), nessun file audio
 let audioCtx = null, soundOn = load('tp.sound', true);
-function clockClick(n) {
-  if (!soundOn) return;
+// Il contesto audio va creato/sbloccato dentro un gesto dell'utente (tasto o click),
+// altrimenti il browser lo lascia "suspended" e non si sente nulla.
+function unlockAudio() {
   try {
     audioCtx ||= new (window.AudioContext || window.webkitAudioContext)();
-    if (audioCtx.state === 'suspended') audioCtx.resume();
-    const t = audioCtx.currentTime;
-    const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
-    osc.type = 'square';
-    osc.frequency.setValueAtTime(n % 2 ? 900 : 1300, t);          // toc più grave del tic
-    gain.gain.setValueAtTime(0.0001, t);
-    gain.gain.exponentialRampToValueAtTime(0.18, t + 0.002);
-    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.04);
-    osc.connect(gain).connect(audioCtx.destination);
-    osc.start(t); osc.stop(t + 0.05);
+    if (audioCtx.state !== 'running') audioCtx.resume();
   } catch {}
 }
-function soundBtn() { $('rpSound').textContent = soundOn ? '🔊 Suono' : '🔇 Suono'; $('rpSound').classList.toggle('active', soundOn); }
+function beep(freq, dur, vol, type = 'square') {
+  if (!soundOn || !audioCtx) return;
+  const play = () => {
+    const t = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, t);
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(vol, t + 0.002);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    osc.connect(gain).connect(audioCtx.destination);
+    osc.start(t); osc.stop(t + dur + 0.02);
+  };
+  try {
+    if (audioCtx.state === 'running') play();
+    else audioCtx.resume().then(play).catch(() => {});
+  } catch {}
+}
+const clockClick = n => beep(n % 2 ? 900 : 1300, 0.04, 0.18);       // tic più acuto, toc più grave
+const keySound = ok => ok ? beep(2200, 0.018, 0.06) : beep(170, 0.09, 0.2, 'triangle');   // click / tonfo sull'errore
+function soundBtn() {
+  const t = soundOn ? '🔊 Suono' : '🔇 Suono';
+  ['rpSound', 'soundBtn'].forEach(id => { $(id).textContent = t; $(id).classList.toggle('active', soundOn); });
+}
 
 function playReplay() {
   clearTimeout(rpTimer);
@@ -515,6 +532,7 @@ function drillKey(e) {
   }
   if (e.key.length !== 1 || e.ctrlKey || e.metaKey || e.altKey) return;
   const info = $('drillInfo');
+  keySound(e.key === d.word[d.buf.length]);
   if (e.key === d.word[d.buf.length]) {
     info.classList.remove('bad');
     d.buf += e.key;
@@ -536,6 +554,8 @@ $('rpOther').onclick = () => { const d = g.drill; d.ai = (d.ai - 1 + d.attempts.
 $('rpGo').onclick = () => showReps();
 const toggleSound = () => { soundOn = !soundOn; save('tp.sound', soundOn); soundBtn(); };
 $('rpSound').onclick = e => { e.currentTarget.blur(); toggleSound(); };
+$('soundBtn').onclick = e => { e.currentTarget.blur(); unlockAudio(); toggleSound(); };
+document.addEventListener('pointerdown', unlockAudio);
 soundBtn();
 
 function endDrill() {
@@ -594,6 +614,7 @@ function chart() {
 }
 
 document.addEventListener('keydown', e => {
+  unlockAudio();
   if (g.helpSince) {                 // aiuto aperto: Esc/Invio/F1 chiudono, il resto è bloccato
     if (e.key === 'Escape' || e.key === 'F1' || e.key === 'Enter') { e.preventDefault(); closeHelp(); }
     return;
@@ -615,7 +636,9 @@ document.addEventListener('keydown', e => {
   const word = g.queue[g.idx];
   const k = g.buf.length;
   g.keys++;
-  if (k < word.length && e.key === word[k]) g.keysOk++; else g.wordBad = true;
+  const hit = k < word.length && e.key === word[k];
+  if (hit) g.keysOk++; else g.wordBad = true;
+  keySound(hit);
   if (g.buf.length < word.length + 5) {
     const now = performance.now();
     if (!g.rec.length) g.recT0 = now;

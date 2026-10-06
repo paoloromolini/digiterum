@@ -14,6 +14,7 @@ Apri `index.html` nel browser. Nessuna installazione né dipendenze. Dentro l'ap
 - **Modalità**: 60s, 30s o Libera (senza timer, chiudi con Esc). Il timer parte al primo tasto.
 - **WPM**: conta solo le parole corrette (5 caratteri = 1 parola). L'accuratezza è la percentuale di tasti giusti.
 - **Lingue**: parole in inglese o italiano.
+- **Suoni**: click a ogni tasto giusto, tonfo sordo su quello sbagliato (sintetizzati, nessun file audio). Il pulsante **Suono** li spegne.
 
 ### Punti deboli
 - Le parole sbagliate vengono salvate e riproposte nelle sessioni successive (circa il 35% delle parole, quando ne hai almeno 3).

@@ -249,7 +249,11 @@ function load(key, def) { try { return JSON.parse(localStorage.getItem(key)) ?? 
 function save(key, v) { try { localStorage.setItem(key, JSON.stringify(v)); } catch {} }
 const weakKey = () => 'tp.weak.' + state.lang;
 let weak = load(weakKey(), {});          // parola -> punteggio di debolezza
-let history = load('tp.history', []);    // [{t, wpm, acc, mode, lang}]
+let history = load('tp.history', []);
+// statistiche per lettera (cumulative, per lingua): ks = { lettera: {n: digitazioni, e: errori} }, pairs = { 'atteso>digitato': conteggio }
+const ksKey = () => 'tp.keystats.' + state.lang;
+const MIN_KEY_N = 10;                    // campione minimo per classificare una lettera
+const bump = (o, k, f) => { (o[k] ||= {}); o[k][f] = (o[k][f] || 0) + 1; };    // [{t, wpm, acc, mode, lang}]
 function weakWords() { return Object.keys(weak); }
 
 function newGame() {
@@ -264,6 +268,7 @@ function newGame() {
     keys: 0, keysOk: 0, correctChars: 0, wordsOk: 0,
     retry: new Set(), missCount: {},
     streak: 0, bestStreak: 0, recovered: 0,
+    ks: {}, pairs: {},
     rec: [], recT0: 0, attempts: {}   // registrazione tasti del tentativo corrente / tentativi sbagliati per parola
   };
   while (g.queue.length < 40) g.queue.push(rand());
@@ -379,6 +384,9 @@ function submitWord() {
   let trainDone = false;
   const word = g.queue[g.idx];
   const ok = g.buf === word && !g.wordBad;
+  if (!state.weakOnly) for (let k = g.buf.length; k < word.length; k++) {   // spazio premuto in anticipo: lettere omesse
+    bump(g.ks, word[k], 'n'); bump(g.ks, word[k], 'e'); g.pairs[word[k] + '>∅'] = (g.pairs[word[k] + '>∅'] || 0) + 1;
+  }
   if (ok) {
     g.wordsOk++; g.correctChars += word.length + 1;
     if (weak[word]) { if (--weak[word] <= 0) delete weak[word]; save(weakKey(), weak); }
@@ -682,6 +690,7 @@ function endGame() {
     history = history.slice(-100); save('tp.history', history);
   }
   const missed = Object.entries(g.missCount).sort((a, b) => b[1] - a[1]);
+  mergeKeyStats();
   $('game').style.display = 'none';
   const r = $('result'); r.style.display = 'block';
   r.innerHTML = `
@@ -700,7 +709,65 @@ function endGame() {
       : '<span style="background:none">Nessuna, perfetto!</span>'}</div>
     <h3>Storico (ultime sessioni)</h3>
     ${chart()}
+    ${keyReport()}
     <p style="color:var(--muted)">Parole deboli salvate: <b>${weakWords().length}</b> · Premi Tab per ricominciare.</p>`;
+  buildHeat();
+}
+
+// --- report statistico delle lettere ---
+function mergeKeyStats() {
+  const tot = load(ksKey(), { ks: {}, pairs: {} });
+  for (const [k, v] of Object.entries(g.ks)) { const t = (tot.ks[k] ||= { n: 0, e: 0 }); t.n += v.n || 0; t.e += v.e || 0; }
+  for (const [p, c] of Object.entries(g.pairs)) tot.pairs[p] = (tot.pairs[p] || 0) + c;
+  save(ksKey(), tot);
+}
+function resetKeyStats() {
+  if (!confirm('Azzerare le statistiche delle lettere per questa lingua?')) return;
+  save(ksKey(), { ks: {}, pairs: {} });
+  const el = $('keyReport'); if (el) el.outerHTML = keyReport();
+  buildHeat();
+}
+// perché sbagli: tipo di errore dedotto dalla coppia atteso → digitato
+function pairKind(a, b) {
+  if (b === '∅') return 'omessa';
+  if (isNear(a, b)) return 'tasto vicino';
+  return 'altro';
+}
+function keyReport() {
+  const tot = load(ksKey(), { ks: {}, pairs: {} });
+  const rows = Object.entries(tot.ks).filter(([, v]) => v.n >= MIN_KEY_N)
+    .map(([k, v]) => ({ k, n: v.n, e: v.e || 0, r: (v.e || 0) / v.n })).filter(x => x.e > 0).sort((a, b) => b.r - a.r || b.e - a.e);
+  const pairs = Object.entries(tot.pairs).sort((a, b) => b[1] - a[1]).slice(0, 8);
+  const sample = Object.values(tot.ks).reduce((a, v) => a + v.n, 0);
+  const head = `<h3>Le tue lettere (${state.lang === 'it' ? 'italiano' : 'inglese'})</h3>`;
+  if (sample < 100) return `<div id="keyReport">${head}<p style="color:var(--muted)">Servono più dati: ${sample}/100 lettere registrate. Le statistiche si accumulano sessione dopo sessione.</p></div>`;
+  const pct = r => (r * 100).toFixed(1).replace(/\.0$/, '') + '%';
+  const list = rows.slice(0, 5).map(x =>
+    `<span title="${x.e} errori su ${x.n} volte">${x.k} <b>${pct(x.r)}</b> <small>(${x.e}/${x.n})</small></span>`).join('');
+  const plist = pairs.map(([p, c]) => {
+    const [a, b] = p.split('>');
+    return `<span title="${pairKind(a, b)}">${a} → ${b === '∅' ? 'saltata' : b} <small>×${c} · ${pairKind(a, b)}</small></span>`;
+  }).join('');
+  return `<div id="keyReport">${head}
+    <p style="color:var(--muted);margin:0 0 6px">Tasso di errore: sbagli / volte che la lettera era richiesta (minimo ${MIN_KEY_N} volte). Rosso più intenso = più errori.</p>
+    <div class="kbd compact" id="kbHeat"></div>
+    <h4 style="margin:12px 0 4px">Lettere più sbagliate</h4>
+    <div class="missed">${list || '<span style="background:none">Nessuna lettera con errori: ottimo!</span>'}</div>
+    <h4 style="margin:12px 0 4px">Errori più frequenti (atteso → scritto)</h4>
+    <div class="missed">${plist || '<span style="background:none">Nessun errore registrato.</span>'}</div>
+    <p style="color:var(--muted);font-size:13px">${sample} lettere analizzate · <a href="#" onclick="resetKeyStats();return false">azzera</a></p></div>`;
+}
+function buildHeat() {
+  const kb = $('kbHeat'); if (!kb) return;
+  buildKeyboard(kb);
+  const tot = load(ksKey(), { ks: {}, pairs: {} });
+  const max = Math.max(0.01, ...Object.values(tot.ks).filter(v => v.n >= MIN_KEY_N).map(v => (v.e || 0) / v.n));
+  kb.querySelectorAll('.key').forEach(d => {
+    const v = tot.ks[d.dataset.k]; if (!v || v.n < MIN_KEY_N) return;
+    const r = (v.e || 0) / v.n;
+    d.style.background = `color-mix(in srgb, var(--bad) ${Math.round(8 + 72 * r / max)}%, transparent)`;
+    d.title = `${d.dataset.k}: ${v.e || 0} errori su ${v.n} (${(r * 100).toFixed(1)}%)`;
+  });
 }
 
 // riepilogo dell'allenamento: niente WPM, medaglie né storico
@@ -772,6 +839,14 @@ function gameChar(ch) {
   g.keys++;
   const hit = k < word.length && ch === word[k];
   if (hit) g.keysOk++; else g.wordBad = true;
+  if (!state.weakOnly) {   // l'allenamento sui punti deboli non entra nelle statistiche
+    const exp = k < word.length ? word[k] : '∅';   // ∅ = lettera in più
+    if (exp !== '∅') bump(g.ks, exp, 'n');
+    if (!hit) {
+      if (exp !== '∅') bump(g.ks, exp, 'e');
+      g.pairs[exp + '>' + ch] = (g.pairs[exp + '>' + ch] || 0) + 1;
+    }
+  }
   keySound(hit);
   if (g.buf.length < word.length + 5) {
     const now = performance.now();

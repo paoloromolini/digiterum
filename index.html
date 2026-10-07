@@ -79,7 +79,7 @@
   #drillInfo.bad { color: var(--bad); font-weight: 600; }
   #drillInfo .lbl { font-size: 16px; text-transform: uppercase; letter-spacing: 1px; }
   #drillInfo .nk { min-width: 64px; padding: 6px 16px; border-radius: 12px; background: var(--accent); color: #fff;
-                   font: 700 44px/1.2 ui-monospace, Menlo, monospace; text-transform: uppercase; }
+                   font: 700 44px/1.2 ui-monospace, Menlo, monospace; }
   #drillInfo .arrow { font-size: 36px; color: var(--text); }
   #drillInfo .nf { padding: 8px 20px; border-radius: 12px; border: 3px solid var(--text);
                    font-size: 34px; font-weight: 700; color: var(--text); }
@@ -90,6 +90,7 @@
              font: 18px ui-monospace, Menlo, monospace; text-transform: uppercase; }
   .kbd .key.next { outline: 3px solid var(--accent); transform: translateY(-3px); font-weight: 700;
                   box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 45%, transparent); }
+  .kbd .key.shift { font-size: 16px; }
   .kbd .space { width: 280px; margin: 0 auto; }
   .kbd .space.key { width: 280px; }
   .kbd .spacerow { justify-content: center; }
@@ -107,7 +108,7 @@
   #baseHelp { margin-top: 16px; text-align: center; border-top: 1px solid var(--line); padding-top: 14px; }
   #baseInfo { min-height: 44px; display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; color: var(--muted); }
   #baseInfo .nk { min-width: 40px; padding: 2px 10px; border-radius: 8px; background: var(--accent); color: #fff;
-                  font: 700 24px/1.3 ui-monospace, Menlo, monospace; text-transform: uppercase; }
+                  font: 700 24px/1.3 ui-monospace, Menlo, monospace; }
   #baseInfo .nf { padding: 3px 12px; border-radius: 8px; border: 2px solid var(--text); font-weight: 700; color: var(--text); }
   @media (max-width: 560px) {
     .kbd .key { width: 30px; height: 30px; font-size: 13px; }
@@ -131,6 +132,7 @@
     <button data-mode="30">30s</button>
     <button data-mode="0">Libera</button>
     <button id="weakBtn" title="Allenamento sulle parole su cui sbagli di più: niente timer, punteggio né statistiche">Solo punti deboli (<span id="weakN">0</span>)</button>
+    <button id="mixBtn" title="Maiuscole, numeri e simboli nel testo">Aa 1 #</button>
     <button id="fingersBtn" title="Mostra tastiera e dito da usare per il prossimo tasto">Dita</button>
     <button id="soundBtn" title="Suoni di digitazione e del replay (M nel replay)"></button>
     <button id="helpBtn" title="Come funziona (F1 o ?)">? Aiuto</button>
@@ -170,6 +172,12 @@
         <li>Il WPM conta solo le parole corrette (5 caratteri = 1 parola).</li>
         <li><b>Reazioni</b>: un commento a ogni parola, un trofeo di <b>serie</b> ogni 5 parole di fila giuste e la scheda che trema se sbagli.</li>
         <li><b>Suoni</b>: un click a ogni tasto giusto e un tonfo sordo su quello sbagliato. Il pulsante <b>Suono</b> li spegne.</li>
+      </ul>
+      <h3>Maiuscole, numeri e simboli</h3>
+      <ul>
+        <li>Il pulsante <b>Aa 1 #</b> (acceso di default) mescola nel testo parole con la <b>maiuscola</b>, <b>numeri</b> (anche con $, %, #, + - * /), <b>punteggiatura</b> e parole composte con simboli (<code>_ - @ &amp; =</code>).</li>
+        <li>Per maiuscole e simboli come <code>!</code> o <code>?</code> serve <b>Maiusc</b>: la tastiera evidenzia anche il tasto Maiusc, sempre della mano opposta, con il mignolo.</li>
+        <li>In italiano non compaiono <code>; : ' "</code> (non sono sulla tastiera disegnata). Spegnendo il pulsante tornano solo parole minuscole.</li>
       </ul>
       <h3>Medaglie</h3>
       <ul>
@@ -241,7 +249,7 @@ const WORDS = {
 };
 
 const $ = id => document.getElementById(id);
-const state = { mode: 60, lang: 'en', weakOnly: false };
+const state = { mode: 60, lang: 'en', weakOnly: false, mixed: load('tp.mixed', true) };
 let g;
 
 // --- persistenza (localStorage, tollerante agli errori) ---
@@ -285,7 +293,34 @@ function rand() {
   const w = weakWords();
   // con punti deboli: 35% delle parole (100% in modalità "solo deboli") vengono da lì
   if (w.length && (state.weakOnly || (w.length >= 3 && Math.random() < 0.35))) return w[Math.floor(Math.random() * w.length)];
-  return g.pool[Math.floor(Math.random() * g.pool.length)];
+  const word = g.pool[Math.floor(Math.random() * g.pool.length)];
+  return state.mixed ? decorate(word) : word;
+}
+
+// --- maiuscole, numeri e simboli ---
+// Solo caratteri raggiungibili sulla tastiera disegnata (QWERTY US; in italiano mancano ; : ' ")
+const rnd = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
+const MIX_END = { en: ['.', ',', '!', '?', ';', ':'], it: ['.', ',', '!', '?'] };
+const MIX_WRAP = { en: [['(', ')'], ['"', '"'], ["'", "'"]], it: [['(', ')']] };
+function numberToken() {
+  const a = rnd(1, 99), b = rnd(1, 99);
+  return String(pick([a, rnd(100, 9999), '$' + a, a + '%', '#' + a, a + '+' + b + '=' + (a + b), a + '-' + b, a + '*' + b, a + '/' + b]));
+}
+function symbolToken(w) {
+  const w2 = g.pool[Math.floor(Math.random() * g.pool.length)];
+  return pick([w + '_' + w2, w + '-' + w2, w + '@' + w2, w + '&' + w2, w + '=' + w2, w + rnd(1, 99), '#' + w]);
+}
+// ~15% maiuscole, poi ~27% con numeri, simboli o punteggiatura
+function decorate(w) {
+  if (/^[a-z]/.test(w) && Math.random() < 0.15) w = w[0].toUpperCase() + w.slice(1);
+  const r = Math.random();
+  if (r < 0.10) return numberToken();
+  if (r < 0.15) return symbolToken(w);
+  if (r < 0.27) {
+    if (Math.random() < 0.4) { const [o, c] = pick(MIX_WRAP[state.lang]); return o + w + c; }
+    return w + pick(MIX_END[state.lang]);
+  }
+  return w;
 }
 function setHint(t, bad) { const h = $('hint'); h.textContent = t; h.className = bad ? 'bad' : ''; }
 
@@ -385,7 +420,7 @@ function submitWord() {
   const word = g.queue[g.idx];
   const ok = g.buf === word && !g.wordBad;
   if (!state.weakOnly) for (let k = g.buf.length; k < word.length; k++) {   // spazio premuto in anticipo: lettere omesse
-    bump(g.ks, word[k], 'n'); bump(g.ks, word[k], 'e'); g.pairs[word[k] + '>∅'] = (g.pairs[word[k] + '>∅'] || 0) + 1;
+    statExpected(word[k]); bump(g.ks, keyOf(word[k]).base, 'e'); g.pairs[word[k] + '>∅'] = (g.pairs[word[k] + '>∅'] || 0) + 1;
   }
   if (ok) {
     g.wordsOk++; g.correctChars += word.length + 1;
@@ -419,28 +454,53 @@ function submitWord() {
 const DRILL_EVERY = 4, DRILL_REPS = 4;
 const FINGERS = ['mignolo sx', 'anulare sx', 'medio sx', 'indice sx', 'indice dx', 'medio dx', 'anulare dx', 'mignolo dx'];
 const KB_ROWS = [
-  { keys: 'qwertyuiop', fingers: [0, 1, 2, 3, 3, 4, 4, 5, 6, 7], pad: 0 },
-  { keys: 'asdfghjkl',  fingers: [0, 1, 2, 3, 3, 4, 4, 5, 6],    pad: 22 },
-  { keys: 'zxcvbnm',    fingers: [0, 1, 2, 3, 3, 4, 4],          pad: 50 }
+  { keys: '1234567890-=', fingers: [0, 1, 2, 3, 3, 4, 4, 5, 6, 7, 7, 7], pad: 0 },
+  { keys: 'qwertyuiop', fingers: [0, 1, 2, 3, 3, 4, 4, 5, 6, 7], pad: 22 },
+  { keys: 'asdfghjkl',  fingers: [0, 1, 2, 3, 3, 4, 4, 5, 6],    pad: 44 },
+  { keys: 'zxcvbnm,./', fingers: [0, 1, 2, 3, 3, 4, 4, 5, 6, 7], pad: 72 }   // qui davanti/dietro ci sono i due Maiusc
 ];
 const fingerOf = {};
 KB_ROWS.forEach(r => [...r.keys].forEach((k, i) => fingerOf[k] = r.fingers[i]));
-// tasti accentati della tastiera italiana (tutti mignolo destro): visibili solo con le parole italiane
-const ACCENT_KEYS = [{ row: 0, keys: 'èì' }, { row: 1, keys: 'òàù' }];
-const KEY_ALIAS = { 'é': 'è' };            // é = Maiusc + è
-ACCENT_KEYS.forEach(a => [...a.keys].forEach(k => fingerOf[k] = 7));
-fingerOf['é'] = 7;
+// tasti extra per lingua (tutti mignolo destro): accentati italiani, oppure ; ' per l'inglese
+const EXTRA_KEYS = { en: { 2: ";'" }, it: { 1: 'èì', 2: 'òàù' } };
+const extraKeys = (ri, lang = state.lang) => EXTRA_KEYS[lang][ri] || '';
+Object.values(EXTRA_KEYS).forEach(m => Object.values(m).forEach(ks => [...ks].forEach(k => fingerOf[k] = 7)));
+// carattere scritto con Maiusc -> tasto base
+const SHIFTED = { '!': '1', '@': '2', '#': '3', '$': '4', '%': '5', '^': '6', '&': '7', '*': '8', '(': '9', ')': '0',
+                  '_': '-', '+': '=', '"': "'", ':': ';', '?': '/', '<': ',', '>': '.' };
+// tasto fisico, dito e (se serve) Maiusc per un carattere; il Maiusc è sempre dalla mano opposta, col mignolo
+function keyOf(ch) {
+  let base = ch, shift = false;
+  if (ch === 'é') { base = 'è'; shift = true; }
+  else if (SHIFTED[ch]) { base = SHIFTED[ch]; shift = true; }
+  else if (/^[A-Z]$/.test(ch)) { base = ch.toLowerCase(); shift = true; }
+  const finger = fingerOf[base];
+  const shiftKey = shift && finger !== undefined ? (finger <= 3 ? '⇧r' : '⇧l') : null;
+  return { base, finger, shiftKey, shiftFinger: shiftKey ? (shiftKey === '⇧r' ? 7 : 0) : undefined };
+}
+const keyLabel = k => k === '⇧l' ? 'Maiusc sx' : k === '⇧r' ? 'Maiusc dx' : k;
+// lettera/simbolo atteso: conta una volta il tasto base e, se serve, il Maiusc
+function statExpected(exp) { const e = keyOf(exp); bump(g.ks, e.base, 'n'); if (e.shiftKey) bump(g.ks, e.shiftKey, 'n'); }
+// a quale tasto attribuire l'errore: Maiusc dimenticato/di troppo, altrimenti il tasto atteso
+function errKey(exp, ch) {
+  const e = keyOf(exp), t = keyOf(ch);
+  return e.base === t.base && e.shiftKey !== t.shiftKey ? (e.shiftKey || t.shiftKey) : e.base;
+}
 const fingerColor = f => `hsl(${f * 45} 70% 55% / .22)`;
 
 function buildKeyboard(kb) {
   kb.innerHTML = ''; kb.dataset.lang = state.lang;
+  const mk = (k, label, f) => {
+    const d = document.createElement('div'); d.className = 'key'; d.dataset.k = k; d.textContent = label;
+    d.style.background = fingerColor(f); return d;
+  };
   KB_ROWS.forEach((r, ri) => {
-    const row = document.createElement('div'); row.className = 'row'; row.style.marginLeft = r.pad + 'px';
-    const extra = state.lang === 'it' ? (ACCENT_KEYS.find(a => a.row === ri)?.keys || '') : '';
-    [...r.keys + extra].forEach((k, i) => {
-      const d = document.createElement('div'); d.className = 'key'; d.dataset.k = k; d.textContent = k;
-      d.style.background = fingerColor(r.fingers[i] ?? 7); row.appendChild(d);
-    });
+    const row = document.createElement('div'); row.className = 'row';
+    const last = ri === KB_ROWS.length - 1;
+    if (last) { const s = mk('⇧l', '⇧', 0); s.classList.add('shift'); s.style.width = (r.pad - 6) + 'px'; row.appendChild(s); }
+    else row.style.marginLeft = r.pad + 'px';
+    [...r.keys + extraKeys(ri)].forEach((k, i) => row.appendChild(mk(k, k, r.fingers[i] ?? 7)));
+    if (last) { const s = mk('⇧r', '⇧', 7); s.classList.add('shift'); s.style.width = '64px'; row.appendChild(s); }
     kb.appendChild(row);
   });
   const sp = document.createElement('div'); sp.className = 'row spacerow';
@@ -469,12 +529,17 @@ function showReps() {
 let rpTimer = null;
 const esc = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const KB_POS = {};
-KB_ROWS.forEach((r, ri) => [...r.keys + (ACCENT_KEYS.find(a => a.row === ri)?.keys || '')]
-  .forEach((k, i) => KB_POS[k] = { x: i + r.pad / 54, y: ri }));
-KB_POS['é'] = KB_POS['è'];
-const isNear = (a, b) => KB_POS[a] && KB_POS[b] &&
-  Math.hypot(KB_POS[a].x - KB_POS[b].x, KB_POS[a].y - KB_POS[b].y) <= 1.45;
-const fingerName = ch => fingerOf[ch] !== undefined ? FINGERS[fingerOf[ch]] : ch === ' ' ? 'pollici' : 'altro tasto';
+KB_ROWS.forEach((r, ri) => Object.keys(EXTRA_KEYS).forEach(l => [...r.keys + extraKeys(ri, l)]
+  .forEach((k, i) => KB_POS[k] ||= { x: i + r.pad / 54, y: ri })));
+const isNear = (a, b) => {
+  const A = KB_POS[keyOf(a).base], B = KB_POS[keyOf(b).base];
+  return !!(A && B) && Math.hypot(A.x - B.x, A.y - B.y) <= 1.45;
+};
+const fingerName = ch => {
+  const { finger, shiftKey, shiftFinger } = keyOf(ch);
+  if (finger === undefined) return ch === ' ' ? 'pollici' : 'altro tasto';
+  return FINGERS[finger] + (shiftKey ? ` + Maiusc ${FINGERS[shiftFinger]}` : '');
+};
 function clearHits() { document.querySelectorAll('#kb .key').forEach(k => k.classList.remove('hit-ok', 'hit-bad', 'next')); }
 
 // spiega che tipo di errore è stato: tasto vicino, lettere invertite, saltata, in più...
@@ -486,8 +551,10 @@ function classify(w, t) {
     if (diff.length === 2 && b === a + 1 && w[a] === t[b] && w[b] === t[a])
       return [`Lettere invertite: <b>${esc(w[a] + w[b])}</b> → <b>${esc(t[a] + t[b])}</b>. Rallenta su questa coppia.`];
     return diff.map(i => {
-      const why = (isNear(w[i], t[i]) ? 'tasto vicino' : 'tasto lontano') +
-        (fingerOf[w[i]] !== undefined && fingerOf[w[i]] === fingerOf[t[i]] ? ', stesso dito' : '');
+      const fw = keyOf(w[i]).finger;
+      const why = w[i].toLowerCase() === t[i].toLowerCase()
+        ? (w[i] !== w[i].toLowerCase() ? 'Maiusc dimenticato' : 'Maiusc di troppo')
+        : (isNear(w[i], t[i]) ? 'tasto vicino' : 'tasto lontano') + (fw !== undefined && fw === keyOf(t[i]).finger ? ', stesso dito' : '');
       return `Posizione ${i + 1}: <b>${esc(t[i])}</b> invece di <b>${esc(w[i])}</b> (${why})`;
     });
   }
@@ -555,8 +622,7 @@ function playReplay() {
     const gap = i ? a.keys[i].t - a.keys[i - 1].t : 0;
     clearHits();
     clockClick(i);
-    const key = [...document.querySelectorAll('#kb .key')].find(x => x.dataset.k === (KEY_ALIAS[k] || k));
-    if (key) key.classList.add(ok ? 'hit-ok' : 'hit-bad');
+    keyEls($('kb'), k).forEach(x => x.classList.add(ok ? 'hit-ok' : 'hit-bad'));
     if (!ok && exp) markNext($('kb'), exp);
     const span = document.createElement('span');
     span.className = ok ? 'c-ok' : 'c-bad'; span.textContent = k; $('rpTyped').appendChild(span);
@@ -581,7 +647,7 @@ function drillRender() {
   const d = g.drill, w = d.word;
   $('drillDots').textContent = '●'.repeat(d.done) + '○'.repeat(DRILL_REPS - d.done);
   $('drillWord').innerHTML = [...w].map((c, i) =>
-    `<span class="${i < d.buf.length ? 'c-ok' : ''}">${c}</span>`).join('');
+    `<span class="${i < d.buf.length ? 'c-ok' : ''}">${esc(c)}</span>`).join('');
   // riquadro "quello che scrivi": lettere giuste in verde, l'errore in rosso
   $('drillTyped').innerHTML = d.view
     ? [...d.view].map((c, i) => `<span class="${i < w.length && c === w[i] ? 'c-ok' : 'c-bad'}">${esc(c)}</span>`).join('')
@@ -590,21 +656,23 @@ function drillRender() {
   markNext($('kb'), next);
   if (!$('drillInfo').classList.contains('bad')) $('drillInfo').innerHTML = nextHtml(next);
 }
-// evidenzia il tasto `ch` sulla tastiera `kb`
+// elementi della tastiera `kb` da premere per `ch` (tasto base + eventuale Maiusc)
+function keyEls(kb, ch) {
+  const { base, shiftKey } = keyOf(ch);
+  return [...kb.querySelectorAll('.key')].filter(k => k.dataset.k === base || k.dataset.k === shiftKey);
+}
+// evidenzia i tasti per `ch` sulla tastiera `kb`
 function markNext(kb, ch) {
   kb.querySelectorAll('.key.next').forEach(k => k.classList.remove('next'));
-  const key = [...kb.querySelectorAll('.key')].find(k => k.dataset.k === (KEY_ALIAS[ch] || ch));
-  if (key) key.classList.add('next');
+  keyEls(kb, ch).forEach(k => k.classList.add('next'));
 }
-// "PROSSIMO [lettera] → [dito]"; usato sia nel drill sia nella modalità base
+// "PROSSIMO [carattere] → [dito] (+ Maiusc → [dito])"; usato sia nel drill sia nella modalità base
 function nextHtml(ch) {
-  const f = fingerOf[ch];
-  return f !== undefined
-    ? `<span class="lbl">Prossimo</span><span class="nk">${ch}</span><span class="arrow">→</span>` +
-      `<span class="nf" style="background:hsl(${f * 45} 70% 55% / .35)">${FINGERS[f]}</span>` +
-      (ch === 'é' ? `<span class="lbl">con Maiusc</span>` : '')
-    : `<span class="lbl">Prossimo</span><span class="nk">${ch === ' ' ? '␣' : ch}</span>` +
-      (ch === ' ' ? `<span class="arrow">→</span><span class="nf">pollici</span>` : '');
+  const { finger: f, shiftKey, shiftFinger } = keyOf(ch);
+  const nk = `<span class="lbl">Prossimo</span><span class="nk">${esc(ch === ' ' ? '␣' : ch)}</span>`;
+  if (f === undefined) return nk + (ch === ' ' ? `<span class="arrow">→</span><span class="nf">pollici</span>` : '');
+  return nk + `<span class="arrow">→</span><span class="nf" style="background:hsl(${f * 45} 70% 55% / .35)">${FINGERS[f]}</span>` +
+    (shiftKey ? `<span class="lbl">con Maiusc</span><span class="nf" style="background:hsl(${shiftFinger * 45} 70% 55% / .35)">${FINGERS[shiftFinger]}</span>` : '');
 }
 
 // --- aiuto dita nella modalità base ---
@@ -705,7 +773,7 @@ function endGame() {
     <p>Accuratezza <b>${s.acc}%</b> · Parole corrette <b>${g.wordsOk}</b> · Parole sbagliate <b>${missed.reduce((a, m) => a + m[1], 0)}</b></p>
     <h3>Parole su cui hai sbagliato</h3>
     <div class="missed">${missed.length
-      ? missed.map(([w, n]) => `<span>${w}${n > 1 ? ' ×' + n : ''}</span>`).join('')
+      ? missed.map(([w, n]) => `<span>${esc(w)}${n > 1 ? ' ×' + n : ''}</span>`).join('')
       : '<span style="background:none">Nessuna, perfetto!</span>'}</div>
     <h3>Storico (ultime sessioni)</h3>
     ${chart()}
@@ -730,6 +798,7 @@ function resetKeyStats() {
 // perché sbagli: tipo di errore dedotto dalla coppia atteso → digitato
 function pairKind(a, b) {
   if (b === '∅') return 'omessa';
+  if (a.toLowerCase() === b.toLowerCase()) return 'Maiusc';
   if (isNear(a, b)) return 'tasto vicino';
   return 'altro';
 }
@@ -743,10 +812,10 @@ function keyReport() {
   if (sample < 100) return `<div id="keyReport">${head}<p style="color:var(--muted)">Servono più dati: ${sample}/100 lettere registrate. Le statistiche si accumulano sessione dopo sessione.</p></div>`;
   const pct = r => (r * 100).toFixed(1).replace(/\.0$/, '') + '%';
   const list = rows.slice(0, 5).map(x =>
-    `<span title="${x.e} errori su ${x.n} volte">${x.k} <b>${pct(x.r)}</b> <small>(${x.e}/${x.n})</small></span>`).join('');
+    `<span title="${x.e} errori su ${x.n} volte">${esc(keyLabel(x.k))} <b>${pct(x.r)}</b> <small>(${x.e}/${x.n})</small></span>`).join('');
   const plist = pairs.map(([p, c]) => {
     const [a, b] = p.split('>');
-    return `<span title="${pairKind(a, b)}">${a} → ${b === '∅' ? 'saltata' : b} <small>×${c} · ${pairKind(a, b)}</small></span>`;
+    return `<span title="${pairKind(a, b)}">${esc(a)} → ${b === '∅' ? 'saltata' : esc(b)} <small>×${c} · ${pairKind(a, b)}</small></span>`;
   }).join('');
   return `<div id="keyReport">${head}
     <p style="color:var(--muted);margin:0 0 6px">Tasso di errore: sbagli / volte che la lettera era richiesta (minimo ${MIN_KEY_N} volte). Rosso più intenso = più errori.</p>
@@ -766,7 +835,7 @@ function buildHeat() {
     const v = tot.ks[d.dataset.k]; if (!v || v.n < MIN_KEY_N) return;
     const r = (v.e || 0) / v.n;
     d.style.background = `color-mix(in srgb, var(--bad) ${Math.round(8 + 72 * r / max)}%, transparent)`;
-    d.title = `${d.dataset.k}: ${v.e || 0} errori su ${v.n} (${(r * 100).toFixed(1)}%)`;
+    d.title = `${keyLabel(d.dataset.k)}: ${v.e || 0} errori su ${v.n} (${(r * 100).toFixed(1)}%)`;
   });
 }
 
@@ -782,7 +851,7 @@ function endTraining() {
     <p>Parole giuste <b>${g.wordsOk}</b> · Errori <b>${missTotal}</b> · Parole recuperate <b>${g.recovered}</b></p>
     <h3>Punti deboli rimasti (${left.length})</h3>
     <div class="missed">${left.length
-      ? left.map(([w, n]) => `<span>${w}${n > 1 ? ' ×' + n : ''}</span>`).join('')
+      ? left.map(([w, n]) => `<span>${esc(w)}${n > 1 ? ' ×' + n : ''}</span>`).join('')
       : '<span style="background:none">Nessuno: li hai recuperati tutti! 🎉</span>'}</div>
     <p style="color:var(--muted)">Premi Tab per ricominciare.</p>`;
 }
@@ -814,7 +883,7 @@ document.addEventListener('keydown', e => {
     if (e.key === 'Escape' || e.key === 'F1' || e.key === 'Enter') { e.preventDefault(); closeHelp(); }
     return;
   }
-  if (e.key === 'F1' || (e.key === '?' && !g.drill)) { e.preventDefault(); return openHelp(); }
+  if (e.key === 'F1' || (e.key === '?' && !g.drill && !g.buf)) { e.preventDefault(); return openHelp(); }
   if (!isShortcut(e) && routeCompose(e)) return;
   if (g.drill) return drillKey(e);   // durante l'esercizio tutto il resto è bloccato
   if (e.key === 'Tab') { e.preventDefault(); return newGame(); }
@@ -841,9 +910,9 @@ function gameChar(ch) {
   if (hit) g.keysOk++; else g.wordBad = true;
   if (!state.weakOnly) {   // l'allenamento sui punti deboli non entra nelle statistiche
     const exp = k < word.length ? word[k] : '∅';   // ∅ = lettera in più
-    if (exp !== '∅') bump(g.ks, exp, 'n');
+    if (exp !== '∅') statExpected(exp);
     if (!hit) {
-      if (exp !== '∅') bump(g.ks, exp, 'e');
+      if (exp !== '∅') bump(g.ks, errKey(exp, ch), 'e');
       g.pairs[exp + '>' + ch] = (g.pairs[exp + '>' + ch] || 0) + 1;
     }
   }
@@ -903,6 +972,12 @@ document.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => {
 $('game').addEventListener('animationend', e => { if (e.animationName === 'shake') $('game').classList.remove('shake'); });
 $('helpBtn').onclick = e => { e.currentTarget.blur(); openHelp(); };
 $('helpClose').onclick = closeHelp;
+$('mixBtn').classList.toggle('active', state.mixed);
+$('mixBtn').onclick = e => {
+  state.mixed = !state.mixed; save('tp.mixed', state.mixed);
+  e.currentTarget.classList.toggle('active', state.mixed);
+  e.currentTarget.blur(); newGame();
+};
 $('fingersBtn').onclick = e => {
   showFingers = !showFingers; save('tp.fingers', showFingers);
   e.currentTarget.blur(); baseHelp();

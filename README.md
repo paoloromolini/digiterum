@@ -14,6 +14,7 @@ Apri `index.html` nel browser. Nessuna installazione né dipendenze. Dentro l'ap
 - **Modalità**: 60s, 30s o Libera (senza timer, chiudi con Esc). Il timer parte al primo tasto.
 - **WPM**: conta solo le parole corrette (5 caratteri = 1 parola). L'accuratezza è la percentuale di tasti giusti.
 - **Lingue**: parole in inglese o italiano.
+- **Maiuscole, numeri e simboli**: il pulsante **Aa 1 #** (acceso di default) mescola nel testo parole con la maiuscola, numeri (anche `$ % # + - * /`), punteggiatura e parole composte (`_ - @ & =`). La tastiera mostra anche il Maiusc (mano opposta, mignolo); in italiano non compaiono `; : ' "`. Gli errori di Maiusc contano sul tasto Maiusc nel report delle lettere.
 - **Suoni**: click a ogni tasto giusto, tonfo sordo su quello sbagliato (sintetizzati, nessun file audio). Il pulsante **Suono** li spegne.
 
 ### Reazioni e medaglie
